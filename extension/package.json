@@ -1,0 +1,52 @@
+{
+  "name": "gemini-local-coder",
+  "displayName": "Gemini Local Coder",
+  "description": "A local coding assistant powered by Gemini via FastAPI.",
+  "version": "1.0.0",
+  "publisher": "YourName",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:geminiCoderView"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gemini-local-coder-container",
+          "title": "Gemini Coder",
+          "icon": "media/gemini-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gemini-local-coder-container": [
+        {
+          "id": "geminiCoderView",
+          "name": "Gemini Code Chat",
+          "type": "webview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.88.0",
+    "@types/node": "^20.12.12",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5"
+  }
+}

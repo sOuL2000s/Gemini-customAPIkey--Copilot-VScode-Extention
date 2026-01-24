@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Code Chat</title>
+    <!-- Links to styles and script will be injected by extension.ts -->
+    <!-- <link href="${styleUri}" rel="stylesheet"> -->
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"> -->
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-history">
+            <div class="message system">
+                Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+            </div>
+        </div>
+    </div>
+    
+    <div id="action-bar">
+        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="3"></textarea>
+        <button id="send-button">Send</button>
+    </div>
+
+    <!-- Script will be linked with a nonce by extension.ts -->
+    <!-- <script nonce="${nonce}" src="${scriptUri}"></script> -->
+</body>
+</html>
