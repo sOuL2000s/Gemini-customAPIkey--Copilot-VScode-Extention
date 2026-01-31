@@ -1,3 +1,6 @@
+/* extension/src/webview/styles.css (Refactored for Copilot-Style UX) */
+
+/* --- General Layout and Theme Variables --- */
 body {
     padding: 0;
     margin: 0;
@@ -12,26 +15,28 @@ body {
 #chat-container {
     flex-grow: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 0 10px; /* Padding reduced/adjusted */
 }
 
+/* --- Chat History Styling --- */
 .message {
     padding: 8px 12px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-    max-width: 90%;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    max-width: 95%;
     word-wrap: break-word;
 }
 
 .message.user {
-    background-color: var(--vscode-editorGroup-border);
+    background-color: var(--vscode-editorGroup-border); /* Subtle background */
     margin-left: auto;
     text-align: right;
 }
 
 .message.assistant {
-    background-color: var(--vscode-textBlockQuote-background);
-    color: var(--vscode-textBlockQuote-border);
+    /* Use a slightly darker background for system/assistant messages for contrast */
+    background-color: var(--vscode-editor-background); 
+    border: 1px solid var(--vscode-activityBar-border); /* Subtle border for separation */
     text-align: left;
     white-space: pre-wrap;
 }
@@ -47,9 +52,8 @@ body {
 }
 
 .code-block {
-    margin-top: 10px;
-    background-color: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-editorGroup-border);
+    margin: 10px 0;
+    background-color: var(--vscode-widget-border); /* Slightly different from background */
     padding: 10px;
     border-radius: 4px;
     overflow-x: auto;
@@ -59,7 +63,7 @@ body {
 .code-actions {
     display: flex;
     gap: 5px;
-    margin-top: 5px;
+    margin-top: 8px;
 }
 
 .code-actions button {
@@ -76,33 +80,318 @@ body {
     background-color: var(--vscode-button-hoverBackground);
 }
 
-#action-bar {
+/* R2: Contextual Editing Simulation */
+.code-edit-block {
+    margin: 15px 0;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-sideBar-border);
+    border-radius: 4px;
+    padding: 0;
+    overflow: hidden;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.code-edit-block pre {
+    margin: 0;
+}
+
+.diff-line {
+    padding: 2px 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.diff-context {
+    opacity: 0.5;
+}
+
+.diff-removed {
+    background-color: var(--vscode-diffEditor-removedTextBackground); /* Red tint */
+    color: var(--vscode-diffEditor-removedText);
+    opacity: 0.8;
+}
+
+.diff-added {
+    background-color: var(--vscode-diffEditor-insertedTextBackground); /* Green tint */
+    color: var(--vscode-diffEditor-insertedText);
+}
+
+/* R3: Action Controls */
+.context-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--vscode-sideBar-border);
+    background-color: var(--vscode-editorWidget-background);
+}
+
+.context-actions button {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.context-actions .accept-button {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.context-actions .reject-button {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+
+/* --- Bottom Controls Wrapper --- */
+#bottom-controls {
     padding: 10px;
     border-top: 1px solid var(--vscode-panel-border);
     display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* --- F2: Configuration Panel (Inline Key Setup) --- */
+#config-panel {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--vscode-editorWidget-border);
+}
+
+#api-key-input {
+    flex-grow: 1;
+    padding: 0 8px;
+    height: 30px;
+    border: 1px solid var(--vscode-input-border);
+    background-color: var(--vscode-inputBackground);
+    color: var(--vscode-inputForeground);
+    border-radius: 3px;
+}
+#save-key-button {
+    white-space: nowrap;
+}
+
+
+/* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
+#context-header {
+    display: flex;
     align-items: center;
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    min-height: 38px;
+    padding: 5px 8px;
+}
+
+#context-file-controls {
+    display: flex;
+    gap: 5px;
+    padding-right: 10px;
+    /* Removed redundant border-right to minimize visual noise, relying on spacing */
+    align-items: center;
+}
+
+#key-status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 5px;
+    background-color: var(--vscode-statusBarItem-errorBackground); /* Red: Missing/Error */
+}
+#key-status-indicator.active {
+    background-color: var(--vscode-statusBarItem-prominentBackground); /* Green: Active/OK */
+}
+
+/* --- Context Summary Area --- */
+#context-summary {
+    flex-grow: 1;
+    padding-left: 10px;
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+}
+
+#context-placeholder {
+    font-style: italic;
+    color: var(--vscode-list-deemphasizedForeground);
+    font-size: 13px;
+}
+
+#context-file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px; /* Reduced gap */
+}
+
+.context-file-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--vscode-badge-background); /* Use badge color for a distinctive look */
+    color: var(--vscode-badge-foreground);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-size: 12px;
+    line-height: 1;
+}
+.context-file-tag button {
+    margin-left: 5px;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.8;
+}
+.context-file-tag button:hover {
+    opacity: 1;
+}
+
+/* --- Action Bar (Prompt Input Area - Mimicking Copilot) --- */
+#action-bar {
+    display: flex;
+    align-items: flex-end; 
+    background-color: var(--vscode-inputBackground); /* Inherits input background from #context-header */
+    border: none; /* Rely on border from #bottom-controls parent */
+    border-radius: 4px;
+    padding: 5px;
 }
 
 #prompt-input {
     flex-grow: 1;
     resize: none;
-    padding: 8px;
-    border: 1px solid var(--vscode-input-background);
-    background-color: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
-    border-radius: 4px;
-    margin-right: 10px;
-}
-
-#send-button {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    padding: 10px 15px;
+    padding: 5px 10px;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
+    background-color: transparent;
+    color: var(--vscode-inputForeground);
+    min-height: 24px;
+    max-height: 200px;
+    line-height: 1.4;
+    font-size: 13px;
+}
+#prompt-input:focus {
+    outline: none;
 }
 
-#send-button:hover {
-    background-color: var(--vscode-button-hoverBackground);
+/* --- Icon Buttons (New Chat, Attachment) --- */
+#new-chat-button, 
+#add-context-file-button {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 0 4px;
+    height: 28px;
+    line-height: 1;
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#new-chat-button:hover,
+#add-context-file-button:hover {
+    opacity: 1;
+}
+
+/* --- Send Button (Arrow Icon) --- */
+#send-button {
+    background: none;
+    border: none;
+    color: var(--vscode-button-background); /* Prominent color, like Copilot's blue/green */
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    margin-left: 5px;
+    padding: 0;
+    opacity: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+#send-button:disabled {
+    color: var(--vscode-button-secondaryForeground);
+    cursor: default;
+    opacity: 0.5;
+}
+
+/* R4: Inline Command Palette Styling */
+#command-palette {
+    position: fixed; /* Use fixed for global positioning */
+    top: 50%; 
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: 90%; /* Responsive width */
+    max-width: 500px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--vscode-editorWidget-border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: none; /* Hidden by default */
+    flex-direction: column;
+}
+
+#palette-input {
+    width: 100%;
+    padding: 8px 15px;
+    border: none;
+    border-bottom: 1px solid var(--vscode-editorWidget-border);
+    background-color: var(--vscode-inputBackground);
+    color: var(--vscode-inputForeground);
+    font-size: 14px;
+    outline: none;
+}
+#palette-input::placeholder {
+    /* Shortcut updated to Ctrl+Shift+G */
+    color: var(--vscode-inputPlaceholderForeground);
+}
+
+#palette-results {
+    max-height: 300px;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.palette-item {
+    padding: 8px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* Only apply top border to subsequent items to avoid double border */
+    border-top: 1px solid transparent; 
+}
+
+.palette-item:hover, .palette-item.selected {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.palette-shortcut {
+    font-size: 11px;
+    opacity: 0.6;
+}
+/* Ensure the palette responds gracefully to narrow sidebars */
+@media (max-width: 350px) {
+    #command-palette {
+        width: 95%;
+    }
 }

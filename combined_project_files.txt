@@ -1,0 +1,1318 @@
+
+--- START FILE: .vscodeignore ---
+
+.vscode-test/
+.vscode-test-web/
+out/
+.git/
+.vscode/
+node_modules/
+src/
+*.map
+tsconfig.json
+.eslintrc.json
+
+--- END FILE: .vscodeignore ---
+
+--- START FILE: package.json ---
+
+{
+  "name": "gemini-local-coder",
+  "displayName": "Gemini Local Coder",
+  "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
+  "version": "1.0.0",
+  "publisher": "YourName",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:geminiCoderView",
+    "onLanguage:*"
+  ],
+  "main": "./out/extension.js",
+  "dependencies": {
+    "@google/genai": "^1.39.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gemini-local-coder-container",
+          "title": "Gemini Coder",
+          "icon": "media/gemini-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gemini-local-coder-container": [
+        {
+          "id": "geminiCoderView",
+          "name": "Gemini Code Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Gemini Coder Configuration",
+      "properties": {
+        "gemini.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Google Gemini API Key. Required for all AI suggestions.",
+          "scope": "resource",
+          "isSecret": true
+        },
+        "gemini.latency.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "description": "The delay (in milliseconds) after typing stops before triggering a completion request (300ms to 700ms recommended).",
+          "minimum": 100,
+          "maximum": 2000
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.108.1",
+    "@types/node": "^25.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3"
+  }
+}
+
+--- END FILE: package.json ---
+
+--- START FILE: tsconfig.json ---
+
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "outDir": "out",
+    "lib": [
+      "es2020",
+      "dom"
+    ],
+    "sourceMap": true,
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".vscode-test"
+  ]
+}
+
+--- END FILE: tsconfig.json ---
+
+--- START FILE: src\ConfigurationManager.ts ---
+
+// src/ConfigurationManager.ts
+import * as vscode from 'vscode';
+
+export class ConfigurationManager {
+    private static readonly CONFIG_SECTION = 'gemini';
+
+    /**
+     * Retrieves the Gemini API Key securely from the VS Code configuration.
+     * @returns The API key string, or null if not set or empty.
+     */
+    public static getApiKey(): string | null {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        const apiKey = config.get<string>('apiKey');
+        
+        // Safety check: Return null if the key is undefined or an empty string after trimming.
+        if (!apiKey || apiKey.trim() === '') {
+            return null;
+        }
+        return apiKey.trim();
+    }
+
+    /**
+     * Retrieves the configured debounce delay in milliseconds, respecting bounds.
+     */
+    public static getDebounceDelay(): number {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        const delay = config.get<number>('latency.debounceMs') || 500;
+        
+        // Respect the defined package.json bounds (100ms to 2000ms)
+        return Math.max(100, Math.min(2000, delay));
+    }
+}
+
+--- END FILE: src\ConfigurationManager.ts ---
+
+--- START FILE: src\DebounceController.ts ---
+
+// src/DebounceController.ts
+import * as vscode from 'vscode';
+
+/**
+ * Manages debouncing of asynchronous tasks, providing cancellation capabilities.
+ */
+export class DebounceController<T> {
+    private timeoutId: NodeJS.Timeout | undefined;
+    private currentTokenSource: vscode.CancellationTokenSource | undefined;
+
+    constructor(private readonly delayMs: () => number) {}
+
+    /**
+     * Schedules a new task. Cancels any previously scheduled or running tasks.
+     * The task is allowed to return T or undefined (if, e.g., conditions weren't met).
+     * @param task The asynchronous function to execute after the delay.
+     * @returns A Promise that resolves with the task result or undefined if cancelled.
+     */
+    public schedule(task: (token: vscode.CancellationToken) => Promise<T | undefined>): Promise<T | undefined> {
+        // 1. Cancel the previous attempt, if any
+        if (this.currentTokenSource) {
+            this.currentTokenSource.cancel();
+            this.currentTokenSource = undefined;
+        }
+        
+        // Clear any pending timeout
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+        }
+
+        // 2. Create a new token source for the new task
+        const tokenSource = new vscode.CancellationTokenSource();
+        this.currentTokenSource = tokenSource;
+        const token = tokenSource.token;
+
+        return new Promise((resolve) => {
+            this.timeoutId = setTimeout(async () => {
+                this.timeoutId = undefined; // Timer elapsed
+
+                if (token.isCancellationRequested) {
+                    return resolve(undefined); // Was cancelled before execution
+                }
+
+                try {
+                    // Task execution is now correctly typed to return T | undefined
+                    const result = await task(token);
+                    resolve(result);
+                } catch (error) {
+                    // Log error but resolve undefined to avoid breaking the provider chain
+                    console.error("Debounced task execution failed:", error);
+                    resolve(undefined);
+                } finally {
+                    // Clean up the token source if this task finished successfully
+                    if (this.currentTokenSource === tokenSource) {
+                        this.currentTokenSource = undefined;
+                        tokenSource.dispose();
+                    }
+                }
+            }, this.delayMs());
+        });
+    }
+
+    /**
+     * Immediately clears any pending task or active token.
+     */
+    public cancel() {
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+            this.timeoutId = undefined;
+        }
+        if (this.currentTokenSource) {
+            this.currentTokenSource.cancel();
+            this.currentTokenSource = undefined;
+        }
+    }
+}
+
+--- END FILE: src\DebounceController.ts ---
+
+--- START FILE: src\extension.ts ---
+
+import * as vscode from 'vscode';
+import { GoogleGenAI } from '@google/genai';
+import { ConfigurationManager } from './ConfigurationManager';
+import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
+
+// --- Configuration ---
+const GEMINI_CHAT_MODEL = "gemini-2.5-flash"; 
+
+/**
+ * Handles the sidebar view, communication with the editor, and DIRECT Gemini API calls.
+ */
+class GeminiCoderProvider implements vscode.WebviewViewProvider {
+    public static readonly viewType = 'geminiCoderView';
+    
+    private _view?: vscode.WebviewView;
+    private apiAgent: GoogleGenAI | null = null;
+    
+    // F3: State to hold contextual file contents
+    private contextFiles: Map<string, string> = new Map(); 
+
+    constructor(private readonly _extensionUri: vscode.Uri) {
+        this.initializeApiAgent();
+        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+    }
+    
+    private initializeApiAgent() {
+        const apiKey = ConfigurationManager.getApiKey();
+        if (apiKey) {
+            this.apiAgent = new GoogleGenAI({ apiKey });
+            this.postViewStatus();
+        } else {
+            this.apiAgent = null;
+            this.postViewStatus();
+        }
+    }
+
+    private postViewStatus() {
+        if (this._view) {
+            this._view.webview.postMessage({ 
+                command: 'updateStatus', 
+                keyStatus: this.apiAgent !== null,
+                contextFiles: Array.from(this.contextFiles.keys())
+            });
+        }
+    }
+
+    public resolveWebviewView(
+        webviewView: vscode.WebviewView,
+        context: vscode.WebviewViewResolveContext,
+        _token: vscode.CancellationToken,
+    ) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [this._extensionUri],
+        };
+
+        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        this.postViewStatus();
+
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            switch (message.command) {
+                case 'submitPrompt':
+                    this.handlePromptSubmission(message.text);
+                    return;
+                case 'insertCode':
+                    this.insertCode(message.code);
+                    return;
+                case 'replaceSelection':
+                    this.replaceSelection(message.code);
+                    return;
+                case 'newChat':
+                    this.handleNewChatSession();
+                    return;
+                case 'saveKey':
+                    this.handleSaveKey(message.key);
+                    return;
+                case 'addFileContext':
+                    this.handleAddFileContext();
+                    return;
+                case 'removeFileContext':
+                    this.handleRemoveFileContext(message.uri);
+                    return;
+            }
+        });
+    }
+    
+    private handleNewChatSession() {
+        this.contextFiles.clear();
+        this.postViewStatus(); 
+        this.sendMessageToWebview('newChatConfirm', 'Session reset.');
+    }
+
+    private async handleSaveKey(key: string) {
+        const trimmedKey = key.trim();
+        if (trimmedKey) {
+            await vscode.workspace.getConfiguration('gemini').update(
+                'apiKey', 
+                trimmedKey, 
+                vscode.ConfigurationTarget.Global
+            );
+        }
+    }
+
+    private async handleAddFileContext() {
+        const options: vscode.OpenDialogOptions = {
+            canSelectMany: false,
+            openLabel: 'Select file for context',
+            filters: {
+                'Code Files': ['ts', 'js', 'py', 'json', 'yaml', 'txt', 'md'],
+                'All Files': ['*']
+            }
+        };
+
+        const fileUri = await vscode.window.showOpenDialog(options);
+
+        if (fileUri && fileUri.length > 0) {
+            const uri = fileUri[0];
+            try {
+                const contentBytes = await vscode.workspace.fs.readFile(uri);
+                const content = Buffer.from(contentBytes).toString('utf8');
+                
+                if (content.length > 50000) { 
+                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 50,000 characters.`);
+                    return;
+                }
+
+                this.contextFiles.set(uri.fsPath, content);
+                this.postViewStatus();
+
+            } catch (e) {
+                console.error("Failed to read context file:", e);
+                this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath}`);
+            }
+        }
+    }
+
+    private handleRemoveFileContext(uriPath: string) {
+        this.contextFiles.delete(uriPath);
+        this.postViewStatus();
+    }
+    
+    private async handlePromptSubmission(userPrompt: string) {
+        if (!this._view || !this.apiAgent) { return; }
+
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            this.sendMessageToWebview('error', 'No active text editor found.');
+            return;
+        }
+
+        const selectedText = editor.document.getText(editor.selection);
+        const languageId = editor.document.languageId;
+
+        this.sendMessageToWebview('loading', 'Thinking...');
+
+        try {
+            let contextBlock = '';
+            if (this.contextFiles.size > 0) {
+                for (const [path, content] of this.contextFiles.entries()) {
+                    contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
+                }
+            }
+
+            const systemInstruction = `
+                You are an expert Senior Software Engineer specializing in ${languageId}.
+                Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
+                ${contextBlock}
+                If the request is for code replacement or insertion, provide only the clean, complete code block within markdown fences (\`\`\`language\`). 
+                DO NOT add extra commentary outside the code block if code is requested.
+            `;
+
+            const userContent = `
+                --- Selected Code Context ---
+                ${selectedText ? selectedText : 'No code selected.'}
+                --- End Selected Code Context ---
+                
+                User's Request: ${userPrompt}
+            `;
+
+            const response = await this.apiAgent.models.generateContent({
+                model: GEMINI_CHAT_MODEL,
+                contents: userContent,
+                config: {
+                    systemInstruction: systemInstruction
+                }
+            });
+            
+            if (response && response.text) {
+                this.sendMessageToWebview('response', response.text);
+            } else {
+                this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
+            }
+        } catch (error) {
+            let messagePart: string | unknown;
+            if (error instanceof Error) {
+                messagePart = error.message ?? 'Unknown API Error occurred.';
+            } else {
+                messagePart = error;
+            }
+            const errorMessage: string = String(messagePart);
+            
+            console.error('API Call Failed:', errorMessage);
+            this.sendMessageToWebview('error', `Gemini API Error: Check your API key or network connection. Error: ${errorMessage}`);
+        }
+    }
+    
+    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm', content: string) {
+        if (this._view) {
+            this._view.webview.postMessage({ command: type, content: content });
+        }
+    }
+
+
+    private insertCode(code: string) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            editor.edit(editBuilder => {
+                const position = editor.selection.active;
+                editBuilder.insert(position, code);
+            });
+        }
+    }
+
+    private replaceSelection(code: string) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && !editor.selection.isEmpty) {
+            editor.edit(editBuilder => {
+                editBuilder.replace(editor.selection, code);
+            });
+        } else if (editor) {
+             this.insertCode(code);
+        }
+    }
+
+
+    private _getHtmlForWebview(webview: vscode.Webview): string {
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'styles.css'));
+        
+        const nonce = getNonce();
+
+        return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Gemini Code Chat</title>
+                <link href="${styleUri}" rel="stylesheet">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            </head>
+            <body>
+                <div id="chat-container">
+                    <div id="chat-history">
+                        <div class="message system">
+                            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="bottom-controls">
+                    
+                    <div id="config-panel" class="hidden">
+                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
+                        <button id="save-key-button">Save & Activate</button>
+                    </div>
+
+                    <div id="context-header">
+                        <div id="context-file-controls">
+                            
+                            <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
+                                <!-- Paperclip Icon SVG (Attachment Icon) -->
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
+                                    <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
+                                </svg>
+                            </button>
+                            
+                            <button id="new-chat-button" title="Start New Chat Session (Plus Icon)">
+                                <!-- Plus Icon SVG -->
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                            <div id="key-status-indicator" title="API Key Status: Missing"></div>
+                        </div>
+                        <div id="context-summary">
+                            <ul id="context-file-list">
+                                <!-- Files loaded here -->
+                            </ul>
+                            <span id="context-placeholder">Describe what to build next</span>
+                        </div>
+                    </div>
+                
+                    <div id="action-bar">
+                        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="1"></textarea>
+                        <button id="send-button" title="Send Prompt (Arrow Icon)">
+                            <!-- Send Arrow Icon SVG -->
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <script nonce="${nonce}" src="${scriptUri}"></script>
+            </body>
+            </html>`;
+    }
+}
+
+/**
+ * Utility function to generate a nonce for CSP.
+ */
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+
+// --- Extension Activation ---
+export function activate(context: vscode.ExtensionContext) {
+    console.log('Gemini Local Coder extension is now active!');
+
+    const provider = new GeminiCoderProvider(context.extensionUri);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
+    );
+
+    const inlineProvider = new GeminiInlineCompletionProvider();
+    const selector: vscode.DocumentSelector = { language: '*', scheme: 'file' };
+
+    context.subscriptions.push(
+        vscode.languages.registerInlineCompletionItemProvider(selector, inlineProvider)
+    );
+    
+    console.log('Gemini Inline Completion Provider registered.');
+}
+
+export function deactivate() { }
+
+--- END FILE: src\extension.ts ---
+
+--- START FILE: src\InlineCompletionProvider.ts ---
+
+// src/InlineCompletionProvider.ts
+import * as vscode from 'vscode';
+import { GoogleGenAI } from '@google/genai';
+import { DebounceController } from './DebounceController';
+import { ConfigurationManager } from './ConfigurationManager';
+
+export class GeminiInlineCompletionProvider implements vscode.InlineCompletionItemProvider {
+    private apiAgent: GoogleGenAI | null = null;
+    private readonly model = 'gemini-2.5-flash';
+
+    private readonly debounceController = new DebounceController<string>(() => 
+        ConfigurationManager.getDebounceDelay()
+    );
+
+    constructor() {
+        this.initializeApiAgent();
+        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+    }
+
+    private initializeApiAgent() {
+        const apiKey = ConfigurationManager.getApiKey();
+        if (apiKey) {
+            this.apiAgent = new GoogleGenAI({ apiKey });
+            console.log("Gemini API Agent initialized for inline suggestions.");
+        } else {
+            this.apiAgent = null;
+        }
+    }
+
+    public async provideInlineCompletionItems(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        context: vscode.InlineCompletionContext,
+        token: vscode.CancellationToken
+    ): Promise<vscode.InlineCompletionItem[] | null | undefined> {
+
+        if (!this.apiAgent) {
+            // Silently fail if key is missing, as expected for ghost text
+            return null;
+        }
+        
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        
+        // 1. Context Extraction and Prompt Generation
+        const prompt = this.createCodeAwarePrompt(document, position);
+        if (!prompt) {
+             return null;
+        }
+
+        // 2. Debounce and Execute API Call
+        const completionText = await this.debounceController.schedule(async (cancellationToken) => {
+            
+            if (cancellationToken.isCancellationRequested) {
+                return undefined; 
+            }
+
+            try {
+                const response = await this.apiAgent!.models.generateContent({
+                    model: this.model,
+                    contents: prompt,
+                });
+                
+                // Use || '' for safe string access
+                const cleanedText = this.extractRawCode(response.text || '');
+
+                // 4. Calculate relevant insertion text (handling line suffixes)
+                const lineSuffix = document.getText(new vscode.Range(position, document.lineAt(position.line).range.end));
+                
+                let finalSuggestion = cleanedText.trimStart();
+                
+                // Remove the line suffix if the suggestion starts with it
+                if (finalSuggestion.startsWith(lineSuffix)) {
+                    finalSuggestion = finalSuggestion.substring(lineSuffix.length);
+                }
+
+                if (!finalSuggestion.trim()) {
+                    return undefined;
+                }
+                
+                return finalSuggestion;
+
+            } catch (e) {
+                if (!cancellationToken.isCancellationRequested) {
+                    // Only log errors that weren't due to explicit cancellation
+                    console.error("Gemini API call failed:", e);
+                }
+                return undefined;
+            }
+        });
+
+        if (!completionText) {
+            return null;
+        }
+
+        // 5. Return Inline Completion Item (using direct assignment for range fix)
+        const item = new vscode.InlineCompletionItem(completionText);
+        item.range = new vscode.Range(position, position);
+
+        return [item];
+    }
+    
+    private createCodeAwarePrompt(document: vscode.TextDocument, position: vscode.Position): string {
+        const fullContent = document.getText();
+        const language = document.languageId;
+        const offset = document.offsetAt(position);
+        
+        const contentBefore = fullContent.substring(0, offset);
+        const contentAfter = fullContent.substring(offset);
+        
+        const currentLineText = document.lineAt(position.line).text;
+        const indentation = currentLineText.match(/^(\s*)/)?.[1] || '';
+
+        const systemInstruction = `You are an expert code completion AI specializing in the ${language} language. Your task is to provide the logical code continuation, based on the file contents provided.`;
+        
+        const userPrompt = `
+${systemInstruction}
+
+CONTEXT:
+--- START FILE: ${document.fileName} ---
+${contentBefore}###CURSOR###
+${contentAfter}
+--- END FILE ---
+
+TASK: Based on the context and the '###CURSOR###' position, complete the code precisely starting from the cursor. 
+1. Provide ONLY the raw code continuation as text. 
+2. DO NOT wrap the output in markdown fences (e.g., \`\`\`${language}\`). 
+3. Maintain the existing indentation of '${indentation}'. 
+4. Stop immediately once the logical continuation is complete.
+`;
+        return userPrompt;
+    }
+
+    private extractRawCode(responseText: string): string {
+        const codeBlockRegex = /```(?:\w+)?\n([\s\S]*?)\n```/;
+        const match = responseText.match(codeBlockRegex);
+
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        
+        return responseText.trim();
+    }
+    
+    public outlineEditingStrategy(): string {
+        return "The Inline Completion Provider uses the `vscode.InlineCompletionItem.insertText` property. When the user accepts the suggestion (usually by pressing Tab), VS Code automatically applies the text, handling multi-line insertion seamlessly at the `range` specified in the item (typically a zero-width range at the cursor position). No explicit use of `TextEditorEdit` or `WorkspaceEdit` is required for accepting ghost text suggestions.";
+    }
+}
+
+--- END FILE: src\InlineCompletionProvider.ts ---
+
+--- START FILE: src\webview\index.html ---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Code Chat</title>
+    <!-- Links to styles and script will be injected by extension.ts -->
+    <!-- <link href="${styleUri}" rel="stylesheet"> -->
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"> -->
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-history">
+            <div class="message system">
+                Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+            </div>
+        </div>
+    </div>
+    
+    <div id="action-bar">
+        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="3"></textarea>
+        <button id="send-button">Send</button>
+    </div>
+
+    <!-- Script will be linked with a nonce by extension.ts -->
+    <!-- <script nonce="${nonce}" src="${scriptUri}"></script> -->
+</body>
+</html>
+
+--- END FILE: src\webview\index.html ---
+
+--- START FILE: src\webview\main.js ---
+
+// This script runs in the webview context.
+const vscode = acquireVsCodeApi();
+
+document.addEventListener('DOMContentLoaded', () => {
+    const chatHistory = document.getElementById('chat-history');
+    const promptInput = document.getElementById('prompt-input');
+    const sendButton = document.getElementById('send-button');
+    const newChatButton = document.getElementById('new-chat-button');
+    const keyStatusIndicator = document.getElementById('key-status-indicator');
+    const configPanel = document.getElementById('config-panel');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const saveKeyButton = document.getElementById('save-key-button');
+    
+    // UI ELEMENTS FOR F3
+    const contextHeader = document.getElementById('context-header');
+    const contextFileList = document.getElementById('context-file-list');
+    const contextPlaceholder = document.getElementById('context-placeholder');
+    const addContextFileButton = document.getElementById('add-context-file-button');
+    
+    const initialWelcomeMessage = `
+        <div class="message system">
+            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+        </div>`;
+
+    // Initialize history
+    // NOTE: This initial setting is redundant if 'newChatConfirm' handles initialization,
+    // but useful if the view loads before the first status update.
+    chatHistory.innerHTML = initialWelcomeMessage; 
+
+    // Utility to post a message to the extension host (extension.ts)
+    const postMessage = (command, payload = {}) => {
+        vscode.postMessage({ command, ...payload });
+    };
+
+    // --- F1: New Chat Session ---
+    newChatButton.addEventListener('click', () => {
+        postMessage('newChat');
+    });
+
+    // --- F2: Inline API Key Configuration ---
+    saveKeyButton.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key) {
+            saveKeyButton.textContent = 'Saving...';
+            apiKeyInput.disabled = true;
+            saveKeyButton.disabled = true;
+            postMessage('saveKey', { key: key });
+        }
+    });
+
+    // --- F3: Contextual File Inclusion ---
+    addContextFileButton.addEventListener('click', () => {
+        postMessage('addFileContext');
+    });
+    
+    contextFileList.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('remove-context-file')) {
+            const uri = target.getAttribute('data-uri');
+            if (uri) {
+                postMessage('removeFileContext', { uri: uri });
+            }
+        }
+    });
+
+
+    function formatResponse(responseText) {
+        const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
+        let match;
+        let lastIndex = 0;
+        let formattedHtml = '';
+        let codeFound = false;
+
+        while ((match = regex.exec(responseText)) !== null) {
+            codeFound = true;
+            const textBefore = responseText.substring(lastIndex, match.index).trim();
+            const codeContent = match[1];
+
+            if (textBefore) {
+                formattedHtml += `<p>${textBefore}</p>`;
+            }
+
+            formattedHtml += `
+                <div class="code-block">
+                    <pre>${escapeHtml(codeContent)}</pre>
+                    <div class="code-actions">
+                        <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
+                        <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
+                    </div>
+                </div>
+            `;
+            lastIndex = match.index + match[0].length;
+        }
+
+        const textAfter = responseText.substring(lastIndex).trim();
+        if (textAfter) {
+            formattedHtml += `<p>${textAfter}</p>`;
+        }
+        
+        if (!codeFound && responseText.trim()) {
+            formattedHtml = `<p>${responseText.trim()}</p>`;
+        }
+        
+        return formattedHtml;
+    }
+    
+    function updateContextFileList(files) {
+        contextFileList.innerHTML = '';
+        
+        if (files.length > 0) {
+            contextPlaceholder.style.display = 'none';
+            files.forEach(uriPath => {
+                const fileName = uriPath.split(/[\/\\]/).pop(); // Extract file name
+                const listItem = document.createElement('li');
+                
+                listItem.className = 'context-file-tag';
+                listItem.innerHTML = `
+                    <span title="${uriPath}">${fileName}</span>
+                    <button class="remove-context-file" data-uri="${uriPath}" title="Remove Context File">&times;</button>
+                `;
+                contextFileList.appendChild(listItem);
+            });
+        } else {
+            contextPlaceholder.style.display = 'block';
+        }
+    }
+
+
+    // Handle incoming messages from extension.ts
+    window.addEventListener('message', event => {
+        const message = event.data;
+        const content = message.content;
+
+        const loadingMessage = chatHistory.querySelector('.message.loading');
+        if (loadingMessage) {
+            loadingMessage.remove();
+        }
+        
+        // Re-enable inputs only AFTER a response or error is handled
+        if (message.command === 'response' || message.command === 'error') {
+            promptInput.disabled = false;
+            sendButton.disabled = false;
+            promptInput.focus();
+        }
+
+        switch (message.command) {
+            case 'updateStatus': // F2 & F3 Status Updates
+                saveKeyButton.textContent = 'Save & Activate';
+                apiKeyInput.disabled = false;
+                saveKeyButton.disabled = false;
+
+                if (message.keyStatus) {
+                    keyStatusIndicator.classList.add('active');
+                    keyStatusIndicator.title = 'API Key Status: Active';
+                    configPanel.classList.add('hidden');
+                    contextHeader.classList.remove('hidden'); // Show context bar
+                } else {
+                    keyStatusIndicator.classList.remove('active');
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid';
+                    configPanel.classList.remove('hidden');
+                    contextHeader.classList.add('hidden'); // Hide context bar
+                    chatHistory.innerHTML = ''; 
+                }
+                updateContextFileList(message.contextFiles || []);
+                break;
+            
+            case 'newChatConfirm':
+                chatHistory.innerHTML = initialWelcomeMessage;
+                break;
+                
+            case 'loading':
+                appendMessage('loading', content);
+                break;
+            case 'response':
+                const formattedHtml = formatResponse(content);
+                appendMessage('assistant', formattedHtml, false); 
+                attachCodeActionListeners();
+                break;
+            case 'error':
+                appendMessage('error', content);
+                break;
+        }
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        
+        // Auto-resize prompt input area (mimicking modern chat UIs)
+        promptInput.style.height = 'auto';
+        promptInput.style.height = (promptInput.scrollHeight) + 'px';
+    });
+    
+    // Initial auto-resize setup and listener
+    promptInput.addEventListener('input', () => {
+        promptInput.style.height = 'auto';
+        promptInput.style.height = (promptInput.scrollHeight) + 'px';
+    });
+
+
+    // Handle user input
+    sendButton.addEventListener('click', () => {
+        sendMessage();
+    });
+
+    promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function sendMessage() {
+        const prompt = promptInput.value.trim();
+        if (!prompt) return;
+
+        appendMessage('user', prompt);
+        
+        // Reset height and disable input while request is pending
+        promptInput.value = '';
+        promptInput.style.height = 'auto';
+        promptInput.disabled = true;
+        sendButton.disabled = true;
+
+        postMessage('submitPrompt', { text: prompt });
+    }
+    
+    // Add event listeners for code action buttons
+    function attachCodeActionListeners() {
+        document.querySelectorAll('.action-insert').forEach(button => {
+            button.onclick = (e) => {
+                const code = e.currentTarget.getAttribute('data-code');
+                vscode.postMessage({ command: 'insertCode', code: code });
+            };
+        });
+
+        document.querySelectorAll('.action-replace').forEach(button => {
+            button.onclick = (e) => {
+                const code = e.currentTarget.getAttribute('data-code');
+                vscode.postMessage({ command: 'replaceSelection', code: code });
+            };
+        });
+    }
+
+    // DOM Manipulation Helpers
+    function appendMessage(type, content, isText = true) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', type);
+        
+        if (isText) {
+            messageDiv.textContent = content;
+        } else {
+            messageDiv.innerHTML = content;
+        }
+        
+        chatHistory.appendChild(messageDiv);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+    
+    function escapeHtml(unsafe) {
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+});
+
+--- END FILE: src\webview\main.js ---
+
+--- START FILE: src\webview\styles.css ---
+
+/* extension/src/webview/styles.css (Refactored for Copilot-Style UX) */
+
+/* --- General Layout and Theme Variables --- */
+body {
+    padding: 0;
+    margin: 0;
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-sideBar-background);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+#chat-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0 10px; /* Padding reduced/adjusted */
+}
+
+/* --- Chat History Styling --- */
+.message {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    max-width: 95%;
+    word-wrap: break-word;
+}
+
+.message.user {
+    background-color: var(--vscode-editorGroup-border); /* Subtle background */
+    margin-left: auto;
+    text-align: right;
+}
+
+.message.assistant {
+    /* Use a slightly darker background for system/assistant messages for contrast */
+    background-color: var(--vscode-editor-background); 
+    border: 1px solid var(--vscode-activityBar-border); /* Subtle border for separation */
+    text-align: left;
+    white-space: pre-wrap;
+}
+
+.message.error {
+    background-color: var(--vscode-errorForeground);
+    color: var(--vscode-editor-background);
+}
+
+.message.loading {
+    font-style: italic;
+    color: var(--vscode-editorInfo-foreground);
+}
+
+.code-block {
+    margin: 10px 0;
+    background-color: var(--vscode-widget-border); /* Slightly different from background */
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: monospace;
+}
+
+.code-actions {
+    display: flex;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.code-actions button {
+    padding: 4px 8px;
+    cursor: pointer;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.code-actions button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+
+/* --- Bottom Controls Wrapper --- */
+#bottom-controls {
+    padding: 10px;
+    border-top: 1px solid var(--vscode-panel-border);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* --- F2: Configuration Panel (Inline Key Setup) --- */
+#config-panel {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--vscode-editorWidget-border);
+}
+
+#api-key-input {
+    flex-grow: 1;
+    padding: 0 8px;
+    height: 30px;
+    border: 1px solid var(--vscode-input-border);
+    background-color: var(--vscode-inputBackground);
+    color: var(--vscode-inputForeground);
+    border-radius: 3px;
+}
+#save-key-button {
+    white-space: nowrap;
+}
+
+
+/* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
+#context-header {
+    display: flex;
+    align-items: center;
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    min-height: 38px;
+    padding: 5px 8px;
+}
+
+#context-file-controls {
+    display: flex;
+    gap: 5px;
+    padding-right: 10px;
+    /* Removed redundant border-right to minimize visual noise, relying on spacing */
+    align-items: center;
+}
+
+#key-status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 5px;
+    background-color: var(--vscode-statusBarItem-errorBackground); /* Red: Missing/Error */
+}
+#key-status-indicator.active {
+    background-color: var(--vscode-statusBarItem-prominentBackground); /* Green: Active/OK */
+}
+
+/* --- Context Summary Area --- */
+#context-summary {
+    flex-grow: 1;
+    padding-left: 10px;
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+}
+
+#context-placeholder {
+    font-style: italic;
+    color: var(--vscode-list-deemphasizedForeground);
+    font-size: 13px;
+}
+
+#context-file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px; /* Reduced gap */
+}
+
+.context-file-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--vscode-badge-background); /* Use badge color for a distinctive look */
+    color: var(--vscode-badge-foreground);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-size: 12px;
+    line-height: 1;
+}
+.context-file-tag button {
+    margin-left: 5px;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.8;
+}
+.context-file-tag button:hover {
+    opacity: 1;
+}
+
+/* --- Action Bar (Prompt Input Area - Mimicking Copilot) --- */
+#action-bar {
+    display: flex;
+    align-items: flex-end; 
+    background-color: var(--vscode-inputBackground); /* Inherits input background from #context-header */
+    border: none; /* Rely on border from #bottom-controls parent */
+    border-radius: 4px;
+    padding: 5px;
+}
+
+#prompt-input {
+    flex-grow: 1;
+    resize: none;
+    padding: 5px 10px;
+    border: none;
+    background-color: transparent;
+    color: var(--vscode-inputForeground);
+    min-height: 24px;
+    max-height: 200px;
+    line-height: 1.4;
+    font-size: 13px;
+}
+#prompt-input:focus {
+    outline: none;
+}
+
+/* --- Icon Buttons (New Chat, Attachment) --- */
+#new-chat-button, 
+#add-context-file-button {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 0 4px;
+    height: 28px;
+    line-height: 1;
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#new-chat-button:hover,
+#add-context-file-button:hover {
+    opacity: 1;
+}
+
+/* --- Send Button (Arrow Icon) --- */
+#send-button {
+    background: none;
+    border: none;
+    color: var(--vscode-button-background); /* Prominent color, like Copilot's blue/green */
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    margin-left: 5px;
+    padding: 0;
+    opacity: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+#send-button:disabled {
+    color: var(--vscode-button-secondaryForeground);
+    cursor: default;
+    opacity: 0.5;
+}
+
+--- END FILE: src\webview\styles.css ---

@@ -1,19 +1,27 @@
 {
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
-  "description": "A local coding assistant powered by Gemini via FastAPI.",
+  "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
   "version": "1.0.0",
   "publisher": "YourName",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YourName/gemini-local-coder.git"
+  },
   "engines": {
-    "vscode": "^1.88.0"
+    "vscode": "^1.108.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onView:geminiCoderView"
+    "onView:geminiCoderView",
+    "onLanguage:*"
   ],
   "main": "./out/extension.js",
+  "dependencies": {
+    "@google/genai": "^1.39.0"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -32,6 +40,25 @@
           "type": "webview"
         }
       ]
+    },
+    "configuration": {
+      "title": "Gemini Coder Configuration",
+      "properties": {
+        "gemini.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Google Gemini API Key. Required for all AI suggestions.",
+          "scope": "resource",
+          "isSecret": true
+        },
+        "gemini.latency.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "description": "The delay (in milliseconds) after typing stops before triggering a completion request (300ms to 700ms recommended).",
+          "minimum": 100,
+          "maximum": 2000
+        }
+      }
     }
   },
   "scripts": {
@@ -42,11 +69,11 @@
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/vscode": "^1.88.0",
-    "@types/node": "^20.12.12",
-    "@typescript-eslint/eslint-plugin": "^7.11.0",
-    "@typescript-eslint/parser": "^7.11.0",
-    "eslint": "^8.57.0",
-    "typescript": "^5.4.5"
+    "@types/vscode": "^1.108.1",
+    "@types/node": "^25.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3"
   }
 }
