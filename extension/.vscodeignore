@@ -1,6 +1,5 @@
 .vscode-test/
 .vscode-test-web/
-out/
 .git/
 .vscode/
 node_modules/
