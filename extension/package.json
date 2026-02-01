@@ -16,6 +16,7 @@
   ],
   "activationEvents": [
     "onView:geminiCoderView",
+    "onCommand:gemini-local-coder.openCommandPalette",
     "onLanguage:*"
   ],
   "main": "./out/extension.js",
@@ -41,6 +42,43 @@
         }
       ]
     },
+    "commands": [
+      {
+        "command": "gemini-local-coder.openCommandPalette",
+        "title": "Gemini Coder: Open Command Palette",
+        "category": "Gemini Coder"
+      },
+      {
+        "command": "gemini-local-coder.acceptEdit",
+        "title": "Gemini Coder: Accept Suggested Edit (Alt+A)",
+        "category": "Gemini Coder"
+      },
+      {
+        "command": "gemini-local-coder.rejectEdit",
+        "title": "Gemini Coder: Reject Suggested Edit (Alt+R)",
+        "category": "Gemini Coder"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "gemini-local-coder.openCommandPalette",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "gemini-local-coder.acceptEdit",
+        "key": "alt+a",
+        "mac": "alt+a",
+        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
+      },
+      {
+        "command": "gemini-local-coder.rejectEdit",
+        "key": "alt+r",
+        "mac": "alt+r",
+        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
+      }
+    ],
     "configuration": {
       "title": "Gemini Coder Configuration",
       "properties": {

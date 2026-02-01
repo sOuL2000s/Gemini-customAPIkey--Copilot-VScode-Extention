@@ -1,3 +1,4 @@
+// src/webview/main.js
 // This script runs in the webview context.
 const vscode = acquireVsCodeApi();
 
@@ -20,16 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // R4: Command Palette Elements
     const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
-    // const paletteResults = document.getElementById('palette-results'); // Referenced here, but not used in R4 logic below.
 
     const initialWelcomeMessage = `
         <div class="message system">
             Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
         </div>`;
 
-    // Initialize history
-    // NOTE: This initial setting is redundant if 'newChatConfirm' handles initialization,
-    // but useful if the view loads before the first status update.
     chatHistory.innerHTML = initialWelcomeMessage; 
 
     // Utility to post a message to the extension host (extension.ts)
@@ -72,7 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // R4: Command Palette Toggle Logic (Shortcut changed to Ctrl+Shift+G)
     const togglePalette = (show) => {
         if (show) {
-            // Center the palette within the webview space
             commandPalette.style.display = 'flex';
             paletteInput.focus();
         } else {
@@ -103,76 +99,43 @@ document.addEventListener('DOMContentLoaded', () => {
             item.style.display = text.includes(filter) ? 'flex' : 'none';
         });
     });
-
-
-    // R2 & R3: Enhanced formatting for Code Responses and Contextual Edits
-    function formatResponse(responseText) {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-
-        // 1. Check for Contextual Edit Structure
-        if (responseText.includes(CONTEXTUAL_EDIT_MARKER)) {
+    
+    // R4: Command Execution from Palette
+    paletteInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             
-            // Handle case where description is multi-line or missing
-            const parts = responseText.split(CONTEXTUAL_EDIT_MARKER);
-            const description = parts[0].trim();
-            const editContent = parts.length > 1 ? parts[1].trim() : '';
+            const prompt = paletteInput.value.trim();
+            if (!prompt) return;
 
-            const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
+            // Send command as a prompt, then hide the palette
+            postMessage('submitPrompt', { text: prompt });
+            paletteInput.value = '';
+            togglePalette(false);
             
-            if (diffParts.length === 2) {
-                const [removedRaw, addedRaw] = diffParts;
-                
-                let diffHtml = '';
-                let replacementCode = addedRaw.trim(); // The final code to replace with
+            // Show loading message in the main chat view
+            appendMessage('loading', 'Executing command...');
 
-                // Simulate lines before/after the change for visual context
-                diffHtml += `<div class="diff-line diff-context">// ... code context ...</div>`;
-
-                // Removed lines
-                if (removedRaw) {
-                    removedRaw.split('\n').forEach(line => {
-                        diffHtml += `<div class="diff-line diff-removed">${escapeHtml(line)}</div>`;
-                    });
-                }
-                
-                // Added lines (R2)
-                if (addedRaw) {
-                     addedRaw.split('\n').forEach(line => {
-                        diffHtml += `<div class="diff-line diff-added">${escapeHtml(line)}</div>`;
-                    });
-                }
-                
-                diffHtml += `<div class="diff-line diff-context">// ... code context ...</div>`;
-                
-                // Build the final contextual block
-                let formattedHtml = description ? `<p>${escapeHtml(description)}</p>` : '';
-                
-                formattedHtml += `
-                    <div class="code-edit-block">
-                        <pre>${diffHtml}</pre>
-                        <!-- R3: Action Controls -->
-                        <div class="context-actions">
-                            <button class="reject-button" data-type="reject">Reject</button>
-                            <button class="accept-button" data-type="accept" data-code="${escapeHtml(replacementCode)}">Accept Edit</button>
-                        </div>
-                    </div>
-                `;
-                
-                return formattedHtml;
-            }
+            // Disable main input area while processing
+            promptInput.disabled = true;
+            sendButton.disabled = true;
         }
+    });
 
 
-        // 2. Existing logic for standard markdown code blocks
+    // R2 & R3: Enhanced formatting for Code Responses (Simplified)
+    function formatResponse(responseText) {
+        
+        // Treat contextual edit markers as plain text if they reach the webview, 
+        // as successful in-editor edits are intercepted in the extension host.
+        const plainText = responseText;
+
+        // Existing logic for standard markdown code blocks
         const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
         let match;
         let lastIndex = 0;
         let formattedHtml = '';
         let codeFound = false;
-        
-        // Ensure we clean the response if the markers were partially included but structure failed
-        const plainText = responseText.replace(CONTEXTUAL_EDIT_MARKER, '').replace(DIFF_SEPARATOR, ''); 
 
         while ((match = regex.exec(plainText)) !== null) {
             codeFound = true;
@@ -208,7 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateContextFileList(files) {
-        contextFileList.innerHTML = '';
+        // Refactoring Change #7: Optimized List Rendering
+        const fragment = document.createDocumentFragment();
         
         if (files.length > 0) {
             contextPlaceholder.style.display = 'none';
@@ -221,9 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span title="${uriPath}">${fileName}</span>
                     <button class="remove-context-file" data-uri="${uriPath}" title="Remove Context File">&times;</button>
                 `;
-                contextFileList.appendChild(listItem);
+                fragment.appendChild(listItem);
             });
+            contextFileList.innerHTML = ''; // Clear existing content once
+            contextFileList.appendChild(fragment); // Append all at once
         } else {
+            contextFileList.innerHTML = '';
             contextPlaceholder.style.display = 'block';
         }
     }
@@ -245,26 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // R3: Attach listeners for contextual edit action buttons
-    function attachContextualActionListeners() {
-        document.querySelectorAll('.context-actions .accept-button').forEach(button => {
-            button.onclick = (e) => {
-                const code = e.currentTarget.getAttribute('data-code');
-                // Send command to replace the current selection in the active editor
-                vscode.postMessage({ command: 'replaceSelection', code: code });
-            };
-        });
-        
-        document.querySelectorAll('.context-actions .reject-button').forEach(button => {
-            button.onclick = (e) => {
-                // Remove the proposed edit block visually upon rejection
-                const editBlock = e.currentTarget.closest('.code-edit-block');
-                if (editBlock) {
-                    editBlock.remove();
-                }
-            };
-        });
-    }
+    // Note: Contextual edit action listeners removed as in-editor edits are now handled natively via commands.
 
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
@@ -284,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         switch (message.command) {
-            case 'updateStatus': // F2 & F3 Status Updates
+            case 'updateStatus': 
                 saveKeyButton.textContent = 'Save & Activate';
                 apiKeyInput.disabled = false;
                 saveKeyButton.disabled = false;
@@ -293,19 +241,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     keyStatusIndicator.classList.add('active');
                     keyStatusIndicator.title = 'API Key Status: Active';
                     configPanel.classList.add('hidden');
-                    contextHeader.classList.remove('hidden'); // Show context bar
+                    contextHeader.classList.remove('hidden'); 
                 } else {
                     keyStatusIndicator.classList.remove('active');
                     keyStatusIndicator.title = 'API Key Status: Missing/Invalid';
                     configPanel.classList.remove('hidden');
-                    contextHeader.classList.add('hidden'); // Hide context bar
-                    chatHistory.innerHTML = ''; 
+                    contextHeader.classList.add('hidden'); 
+                    chatHistory.innerHTML = ''; // Clear chat history when key is missing
                 }
                 updateContextFileList(message.contextFiles || []);
                 break;
             
             case 'newChatConfirm':
                 chatHistory.innerHTML = initialWelcomeMessage;
+                break;
+            
+            case 'openPalette':
+                togglePalette(true);
                 break;
                 
             case 'loading':
@@ -315,7 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formattedHtml = formatResponse(content);
                 appendMessage('assistant', formattedHtml, false); 
                 attachCodeActionListeners();
-                attachContextualActionListeners();
                 break;
             case 'error':
                 appendMessage('error', content);
@@ -323,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         chatHistory.scrollTop = chatHistory.scrollHeight;
         
-        // Auto-resize prompt input area (mimicking modern chat UIs)
+        // Auto-resize prompt input area 
         promptInput.style.height = 'auto';
         promptInput.style.height = (promptInput.scrollHeight) + 'px';
     });

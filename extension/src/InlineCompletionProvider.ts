@@ -4,6 +4,8 @@ import { GoogleGenAI } from '@google/genai';
 import { DebounceController } from './DebounceController';
 import { ConfigurationManager } from './ConfigurationManager';
 
+const MAX_CONTEXT_CHARS = 200000; // Limit context size
+
 export class GeminiInlineCompletionProvider implements vscode.InlineCompletionItemProvider {
     private apiAgent: GoogleGenAI | null = null;
     private readonly model = 'gemini-2.5-flash';
@@ -34,12 +36,7 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
         token: vscode.CancellationToken
     ): Promise<vscode.InlineCompletionItem[] | null | undefined> {
 
-        if (!this.apiAgent) {
-            // Silently fail if key is missing, as expected for ghost text
-            return null;
-        }
-        
-        if (token.isCancellationRequested) {
+        if (!this.apiAgent || token.isCancellationRequested) {
             return null;
         }
         
@@ -62,16 +59,16 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
                     contents: prompt,
                 });
                 
-                // Use || '' for safe string access
-                const cleanedText = this.extractRawCode(response.text || '');
+                // --- Refactoring Change #1 & #2: Removed extractRawCode, relying on prompt ---
+                const rawSuggestion = (response.text || '').trim();
 
-                // 4. Calculate relevant insertion text (handling line suffixes)
+                // 3. Calculate relevant insertion text (handling line suffixes)
                 const lineSuffix = document.getText(new vscode.Range(position, document.lineAt(position.line).range.end));
                 
-                let finalSuggestion = cleanedText.trimStart();
+                let finalSuggestion = rawSuggestion.trimStart();
                 
                 // Remove the line suffix if the suggestion starts with it
-                if (finalSuggestion.startsWith(lineSuffix)) {
+                if (lineSuffix && finalSuggestion.startsWith(lineSuffix)) {
                     finalSuggestion = finalSuggestion.substring(lineSuffix.length);
                 }
 
@@ -83,8 +80,7 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
 
             } catch (e) {
                 if (!cancellationToken.isCancellationRequested) {
-                    // Only log errors that weren't due to explicit cancellation
-                    console.error("Gemini API call failed:", e);
+                    console.error("Gemini Inline API call failed:", e);
                 }
                 return undefined;
             }
@@ -94,15 +90,23 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
             return null;
         }
 
-        // 5. Return Inline Completion Item (using direct assignment for range fix)
+        // 4. Return Inline Completion Item
         const item = new vscode.InlineCompletionItem(completionText);
-        item.range = new vscode.Range(position, position);
+        // Correctly set range for pure insertion at cursor position
+        item.range = new vscode.Range(position, position); 
 
         return [item];
     }
     
-    private createCodeAwarePrompt(document: vscode.TextDocument, position: vscode.Position): string {
+    private createCodeAwarePrompt(document: vscode.TextDocument, position: vscode.Position): string | null {
         const fullContent = document.getText();
+        
+        // Refactoring Change #3: Context Size Limit
+        if (fullContent.length > MAX_CONTEXT_CHARS) {
+            console.warn(`File context exceeds ${MAX_CONTEXT_CHARS} characters. Skipping inline completion.`);
+            return null;
+        }
+        
         const language = document.languageId;
         const offset = document.offsetAt(position);
         
@@ -126,24 +130,9 @@ ${contentAfter}
 TASK: Based on the context and the '###CURSOR###' position, complete the code precisely starting from the cursor. 
 1. Provide ONLY the raw code continuation as text. 
 2. DO NOT wrap the output in markdown fences (e.g., \`\`\`${language}\`). 
-3. Maintain the existing indentation of '${indentation}'. 
+3. Maintain the existing indentation of '${indentation}' for new lines. 
 4. Stop immediately once the logical continuation is complete.
 `;
         return userPrompt;
-    }
-
-    private extractRawCode(responseText: string): string {
-        const codeBlockRegex = /```(?:\w+)?\n([\s\S]*?)\n```/;
-        const match = responseText.match(codeBlockRegex);
-
-        if (match && match[1]) {
-            return match[1].trim();
-        }
-        
-        return responseText.trim();
-    }
-    
-    public outlineEditingStrategy(): string {
-        return "The Inline Completion Provider uses the `vscode.InlineCompletionItem.insertText` property. When the user accepts the suggestion (usually by pressing Tab), VS Code automatically applies the text, handling multi-line insertion seamlessly at the `range` specified in the item (typically a zero-width range at the cursor position). No explicit use of `TextEditorEdit` or `WorkspaceEdit` is required for accepting ghost text suggestions.";
     }
 }

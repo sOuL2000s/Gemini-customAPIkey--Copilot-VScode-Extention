@@ -7,6 +7,19 @@ import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
 const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025"; 
 
 /**
+ * Utility function to generate a nonce for CSP.
+ */
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+
+
+/**
  * Handles the sidebar view, communication with the editor, and DIRECT Gemini API calls.
  */
 class GeminiCoderProvider implements vscode.WebviewViewProvider {
@@ -15,8 +28,12 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private apiAgent: GoogleGenAI | null = null;
     
-    // F3: State to hold contextual file contents
+    private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
     private contextFiles: Map<string, string> = new Map(); 
+    
+    // R5: State for tracking in-editor code suggestions
+    private pendingEdit: { description: string, edit: vscode.WorkspaceEdit, documentUri: vscode.Uri, range: vscode.Range } | null = null;
+    private statusDisposables: vscode.Disposable[] = [];
 
     constructor(private readonly _extensionUri: vscode.Uri) {
         this.initializeApiAgent();
@@ -27,11 +44,10 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         const apiKey = ConfigurationManager.getApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
-            this.postViewStatus();
         } else {
             this.apiAgent = null;
-            this.postViewStatus();
         }
+        this.postViewStatus();
     }
 
     private postViewStatus() {
@@ -120,8 +136,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 const contentBytes = await vscode.workspace.fs.readFile(uri);
                 const content = Buffer.from(contentBytes).toString('utf8');
                 
-                if (content.length > 50000) { 
-                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 50,000 characters.`);
+                // Context limit check
+                if (content.length > 100000) { 
+                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 100,000 characters for chat context.`);
                     return;
                 }
 
@@ -140,6 +157,109 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
     
+    /**
+     * R5: Utility to parse the LLM's contextual edit format and return the parts, 
+     * regardless of whether an editor selection exists.
+     */
+    private parseContextualEdit(response: string): { description: string, removedCode: string, replacementCode: string } | null {
+        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
+        const DIFF_SEPARATOR = "[[---]]";
+
+        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
+            return null;
+        }
+
+        // We clear any existing pending edit immediately upon new submission
+        this.clearPendingEdit();
+
+        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
+        const description = parts[0].trim();
+        const editContent = parts.length > 1 ? parts[1].trim() : '';
+
+        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
+
+        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
+        if (diffParts.length !== 2) {
+            console.warn("Malformed CONTEXTUAL_EDIT received.");
+            return null;
+        }
+        
+        const [removedCode, replacementCode] = diffParts;
+
+        return { description, removedCode, replacementCode };
+    }
+
+    /**
+     * R5: Manages the custom VS Code context key and status bar message.
+     */
+    private updatePendingEditContext(hasEdit: boolean) {
+        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
+
+        this.statusDisposables.forEach(d => d.dispose());
+        this.statusDisposables = [];
+
+        if (hasEdit && this.pendingEdit) {
+            const editor = vscode.window.activeTextEditor;
+            // Only show status bar message if the edit applies to the current active document
+            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
+                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
+                this.statusDisposables.push(
+                    // Show a persistent status bar message
+                    vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000) 
+                );
+            }
+        }
+    }
+
+    /**
+     * R5: Clears the pending edit state and status UI.
+     */
+    private clearPendingEdit() {
+        this.pendingEdit = null;
+        this.updatePendingEditContext(false);
+    }
+
+    /**
+     * R5: Accepts and applies the pending in-editor code suggestion.
+     */
+    public async acceptEdit() {
+        if (!this.pendingEdit) {
+            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
+            return;
+        }
+        
+        const currentUri = vscode.window.activeTextEditor?.document.uri;
+
+        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
+            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
+            this.clearPendingEdit(); // Clear old edit if context is lost
+            return;
+        }
+
+        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
+        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
+
+        if (success) {
+            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
+        } else {
+            vscode.window.showErrorMessage('Failed to apply Gemini edit.');
+        }
+
+        this.clearPendingEdit();
+    }
+
+    /**
+     * R5: Rejects the pending in-editor code suggestion.
+     */
+    public rejectEdit() {
+        if (this.pendingEdit) {
+            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
+            this.clearPendingEdit();
+        } else {
+            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
+        }
+    }
+
     private async handlePromptSubmission(userPrompt: string) {
         if (!this._view || !this.apiAgent) { return; }
 
@@ -162,7 +282,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 }
             }
 
-            // FIX: Strengthened system instruction for consistent contextual editing (R2)
+            // System instruction remains to enforce the custom chat format
             const systemInstruction = `
                 You are an expert Senior Software Engineer specializing in ${languageId}.
                 Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
@@ -191,7 +311,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             `;
 
             const response = await this.apiAgent.models.generateContent({
-                model: GEMINI_CHAT_MODEL,
+                model: this.chatModel,
                 contents: userContent,
                 config: {
                     systemInstruction: systemInstruction
@@ -199,30 +319,75 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             });
             
             if (response && response.text) {
+                
+                // R5: Check for in-editor contextual edit format
+                const parsedEdit = this.parseContextualEdit(response.text);
+
+                if (parsedEdit) {
+                    const hasSelection = !editor.selection.isEmpty;
+                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
+                    
+                    if (hasSelection) {
+                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
+                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
+                        const workspaceEdit = new vscode.WorkspaceEdit();
+                        workspaceEdit.replace(
+                            editor.document.uri, 
+                            editor.selection, 
+                            parsedEdit.replacementCode
+                        );
+
+                        // Store the pending edit
+                        this.pendingEdit = {
+                            description: parsedEdit.description || 'Code change suggested',
+                            edit: workspaceEdit,
+                            documentUri: editor.document.uri,
+                            range: editor.selection
+                        };
+
+                        this.updatePendingEditContext(true);
+                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${parsedEdit.description}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
+                        return; 
+                        
+                    } else if (!hasSelection) {
+                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
+                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
+                        this.sendMessageToWebview('response', markdownResponse);
+                        return;
+                    }
+                }
+                
+                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
                 this.sendMessageToWebview('response', response.text);
             } else {
                 this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
             }
         } catch (error) {
-            let messagePart: string | unknown;
+            // Refactoring Change #5: Improved Error Handling
+            let errorMessage: string;
             if (error instanceof Error) {
-                messagePart = error.message ?? 'Unknown API Error occurred.';
+                errorMessage = error.message ?? 'Unknown API Error occurred.';
             } else {
-                messagePart = error;
+                errorMessage = String(error);
             }
-            const errorMessage: string = String(messagePart);
             
             console.error('API Call Failed:', errorMessage);
             this.sendMessageToWebview('error', `Gemini API Error: Check your API key or network connection. Error: ${errorMessage}`);
         }
     }
     
-    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm', content: string) {
+    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette', content: string) {
         if (this._view) {
             this._view.webview.postMessage({ command: type, content: content });
         }
     }
 
+    /**
+     * Called by the VS Code command to open the integrated command palette.
+     */
+    public openCommandPalette() {
+        this.sendMessageToWebview('openPalette', '');
+    }
 
     private insertCode(code: string) {
         const editor = vscode.window.activeTextEditor;
@@ -238,6 +403,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         const editor = vscode.window.activeTextEditor;
         if (editor && !editor.selection.isEmpty) {
             editor.edit(editBuilder => {
+                // This replaces the user's currently selected range with the accepted code.
                 editBuilder.replace(editor.selection, code);
             });
         } else if (editor) {
@@ -281,7 +447,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                         <div id="context-file-controls">
                             
                             <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
-                                <!-- Paperclip Icon SVG (Attachment Icon) -->
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
                                     <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
@@ -289,7 +454,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             </button>
                             
                             <button id="new-chat-button" title="Start New Chat Session (Plus Icon)">
-                                <!-- Plus Icon SVG -->
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <line x1="12" y1="5" x2="12" y2="19"></line>
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -308,7 +472,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     <div id="action-bar">
                         <textarea id="prompt-input" placeholder="Ask Gemini..." rows="1"></textarea>
                         <button id="send-button" title="Send Prompt (Arrow Icon)">
-                            <!-- Send Arrow Icon SVG -->
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
                                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -319,7 +482,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
                 <!-- R4: INLINE COMMAND PALETTE STRUCTURE (Hidden by default) -->
                 <div id="command-palette">
-                    <!-- Shortcut updated to Ctrl+Shift+G -->
                     <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Shift+G)">
                     <ul id="palette-results">
                         <li class="palette-item selected" data-command="/refactor">
@@ -343,17 +505,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     }
 }
 
-/**
- * Utility function to generate a nonce for CSP.
- */
-function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}
 
 // --- Extension Activation ---
 export function activate(context: vscode.ExtensionContext) {
@@ -362,6 +513,19 @@ export function activate(context: vscode.ExtensionContext) {
     const provider = new GeminiCoderProvider(context.extensionUri);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
+    );
+    
+    // R5: Register Command Palette Command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('gemini-local-coder.openCommandPalette', () => {
+            provider.openCommandPalette();
+        })
+    );
+    
+    // R5: Register Edit Commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()),
+        vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit())
     );
 
     const inlineProvider = new GeminiInlineCompletionProvider();

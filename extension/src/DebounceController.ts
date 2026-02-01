@@ -12,7 +12,6 @@ export class DebounceController<T> {
 
     /**
      * Schedules a new task. Cancels any previously scheduled or running tasks.
-     * The task is allowed to return T or undefined (if, e.g., conditions weren't met).
      * @param task The asynchronous function to execute after the delay.
      * @returns A Promise that resolves with the task result or undefined if cancelled.
      */
@@ -20,7 +19,7 @@ export class DebounceController<T> {
         // 1. Cancel the previous attempt, if any
         if (this.currentTokenSource) {
             this.currentTokenSource.cancel();
-            this.currentTokenSource = undefined;
+            // Do NOT set currentTokenSource to undefined yet; it cleans itself up in finally block.
         }
         
         // Clear any pending timeout
@@ -42,7 +41,6 @@ export class DebounceController<T> {
                 }
 
                 try {
-                    // Task execution is now correctly typed to return T | undefined
                     const result = await task(token);
                     resolve(result);
                 } catch (error) {
@@ -50,11 +48,11 @@ export class DebounceController<T> {
                     console.error("Debounced task execution failed:", error);
                     resolve(undefined);
                 } finally {
-                    // Clean up the token source if this task finished successfully
+                    // Critical: Clean up the token source
                     if (this.currentTokenSource === tokenSource) {
                         this.currentTokenSource = undefined;
-                        tokenSource.dispose();
                     }
+                    tokenSource.dispose();
                 }
             }, this.delayMs());
         });
@@ -70,6 +68,7 @@ export class DebounceController<T> {
         }
         if (this.currentTokenSource) {
             this.currentTokenSource.cancel();
+            // Disposal happens via the scheduled task's finally block
             this.currentTokenSource = undefined;
         }
     }
