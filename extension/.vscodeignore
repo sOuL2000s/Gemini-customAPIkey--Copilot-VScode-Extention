@@ -2,7 +2,6 @@
 .vscode-test-web/
 .git/
 .vscode/
-node_modules/
 src/**/*.ts
 *.map
 tsconfig.json
