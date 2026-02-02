@@ -3,7 +3,7 @@
 .git/
 .vscode/
 node_modules/
-src/
+src/**/*.ts
 *.map
 tsconfig.json
 .eslintrc.json

@@ -3,11 +3,10 @@
 
 .vscode-test/
 .vscode-test-web/
-out/
 .git/
 .vscode/
 node_modules/
-src/
+src/**/*.ts
 *.map
 tsconfig.json
 .eslintrc.json
@@ -34,6 +33,7 @@ tsconfig.json
   ],
   "activationEvents": [
     "onView:geminiCoderView",
+    "onCommand:gemini-local-coder.openCommandPalette",
     "onLanguage:*"
   ],
   "main": "./out/extension.js",
@@ -59,6 +59,43 @@ tsconfig.json
         }
       ]
     },
+    "commands": [
+      {
+        "command": "gemini-local-coder.openCommandPalette",
+        "title": "Gemini Coder: Open Command Palette",
+        "category": "Gemini Coder"
+      },
+      {
+        "command": "gemini-local-coder.acceptEdit",
+        "title": "Gemini Coder: Accept Suggested Edit (Alt+A)",
+        "category": "Gemini Coder"
+      },
+      {
+        "command": "gemini-local-coder.rejectEdit",
+        "title": "Gemini Coder: Reject Suggested Edit (Alt+R)",
+        "category": "Gemini Coder"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "gemini-local-coder.openCommandPalette",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "gemini-local-coder.acceptEdit",
+        "key": "alt+a",
+        "mac": "alt+a",
+        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
+      },
+      {
+        "command": "gemini-local-coder.rejectEdit",
+        "key": "alt+r",
+        "mac": "alt+r",
+        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
+      }
+    ],
     "configuration": {
       "title": "Gemini Coder Configuration",
       "properties": {
@@ -396,6 +433,9 @@ class GeminiCoderProvider {
         this.apiAgent = null;
         this.chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
         this.contextFiles = new Map();
+        // R5: State for tracking in-editor code suggestions
+        this.pendingEdit = null;
+        this.statusDisposables = [];
         this.initializeApiAgent();
         vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
     }
@@ -496,6 +536,103 @@ class GeminiCoderProvider {
         this.contextFiles.delete(uriPath);
         this.postViewStatus();
     }
+    /**
+     * R5: Utility to parse the LLM's contextual edit format and return the parts,
+     * regardless of whether an editor selection exists.
+     */
+    parseContextualEdit(response) {
+        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
+        const DIFF_SEPARATOR = "[[---]]";
+        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
+            return null;
+        }
+        // We clear any existing pending edit immediately upon new submission
+        this.clearPendingEdit();
+        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
+        const description = parts[0].trim();
+        const editContent = parts.length > 1 ? parts[1].trim() : '';
+        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
+        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
+        if (diffParts.length !== 2) {
+            console.warn("Malformed CONTEXTUAL_EDIT received.");
+            return null;
+        }
+        const [removedCode, replacementCode] = diffParts;
+        return { description, removedCode, replacementCode };
+    }
+    /**
+     * R5: Manages the custom VS Code context key and status bar message.
+     */
+    updatePendingEditContext(hasEdit) {
+        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
+        this.statusDisposables.forEach(d => d.dispose());
+        this.statusDisposables = [];
+        if (hasEdit && this.pendingEdit) {
+            const editor = vscode.window.activeTextEditor;
+            // Only show status bar message if the edit applies to the current active document
+            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
+                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
+                this.statusDisposables.push(
+                // Show a persistent status bar message
+                vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000));
+            }
+        }
+    }
+    /**
+     * R5: Clears the pending edit state and status UI.
+     */
+    clearPendingEdit() {
+        this.pendingEdit = null;
+        this.updatePendingEditContext(false);
+    }
+    /**
+     * R5: Accepts and applies the pending in-editor code suggestion.
+     */
+    async acceptEdit() {
+        if (!this.pendingEdit) {
+            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
+            return;
+        }
+        const currentUri = vscode.window.activeTextEditor?.document.uri;
+        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
+            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
+            this.clearPendingEdit(); // Clear old edit if context is lost
+            return;
+        }
+        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
+        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
+        if (success) {
+            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
+        }
+        else {
+            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
+            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
+            // Fallback to sending the code to the chat view
+            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
+            const fallbackContent = `
+Edit Failed to Apply: ${this.pendingEdit.description}
+
+You can manually insert the replacement code:
+\`\`\`${languageId}
+${this.pendingEdit.replacementCode}
+\`\`\`
+`;
+            this.sendMessageToWebview('response', fallbackContent);
+        }
+        this.clearPendingEdit();
+    }
+    /**
+     * R5: Rejects the pending in-editor code suggestion.
+     */
+    rejectEdit() {
+        if (this.pendingEdit) {
+            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
+            this.clearPendingEdit();
+        }
+        else {
+            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
+        }
+    }
     async handlePromptSubmission(userPrompt) {
         if (!this._view || !this.apiAgent) {
             return;
@@ -505,13 +642,21 @@ class GeminiCoderProvider {
             this.sendMessageToWebview('error', 'No active text editor found.');
             return;
         }
-        const selectedText = editor.document.getText(editor.selection);
-        const languageId = editor.document.languageId;
+        const document = editor.document;
+        const selectedText = document.getText(editor.selection);
+        const languageId = document.languageId;
+        const fullDocumentContent = document.getText(); // Get full content of the active file
         this.sendMessageToWebview('loading', 'Thinking...');
         try {
             let contextBlock = '';
+            // 1. Inject the currently open file content as primary context
+            contextBlock += `\n--- ACTIVE FILE CONTEXT: ${document.fileName} ---\n${fullDocumentContent}\n--- END ACTIVE FILE CONTEXT ---\n`;
+            // 2. Inject manually added files (external context)
             if (this.contextFiles.size > 0) {
                 for (const [path, content] of this.contextFiles.entries()) {
+                    // Skip if the context file is the active file (to avoid duplication)
+                    if (path === document.uri.fsPath)
+                        continue;
                     contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
                 }
             }
@@ -549,6 +694,38 @@ class GeminiCoderProvider {
                 }
             });
             if (response && response.text) {
+                // R5: Check for in-editor contextual edit format
+                const parsedEdit = this.parseContextualEdit(response.text);
+                if (parsedEdit) {
+                    const hasSelection = !editor.selection.isEmpty;
+                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
+                    if (hasSelection) {
+                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
+                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
+                        const workspaceEdit = new vscode.WorkspaceEdit();
+                        workspaceEdit.replace(document.uri, editor.selection, parsedEdit.replacementCode);
+                        // Store the pending edit
+                        this.pendingEdit = {
+                            description: parsedEdit.description || 'Code change suggested',
+                            edit: workspaceEdit,
+                            documentUri: document.uri,
+                            range: editor.selection,
+                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
+                        };
+                        this.updatePendingEditContext(true);
+                        // Use the description stored in pendingEdit, which includes the fallback
+                        const editDescription = this.pendingEdit.description;
+                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
+                        return;
+                    }
+                    else if (!hasSelection) {
+                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
+                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
+                        this.sendMessageToWebview('response', markdownResponse);
+                        return;
+                    }
+                }
+                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
                 this.sendMessageToWebview('response', response.text);
             }
             else {
@@ -572,6 +749,12 @@ class GeminiCoderProvider {
         if (this._view) {
             this._view.webview.postMessage({ command: type, content: content });
         }
+    }
+    /**
+     * Called by the VS Code command to open the integrated command palette.
+     */
+    openCommandPalette() {
+        this.sendMessageToWebview('openPalette', '');
     }
     insertCode(code) {
         const editor = vscode.window.activeTextEditor;
@@ -690,6 +873,12 @@ function activate(context) {
     console.log('Gemini Local Coder extension is now active!');
     const provider = new GeminiCoderProvider(context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider));
+    // R5: Register Command Palette Command
+    context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.openCommandPalette', () => {
+        provider.openCommandPalette();
+    }));
+    // R5: Register Edit Commands
+    context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()), vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit()));
     const inlineProvider = new InlineCompletionProvider_1.GeminiInlineCompletionProvider();
     const selector = { language: '*', scheme: 'file' };
     context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider(selector, inlineProvider));
@@ -702,7 +891,7 @@ function deactivate() { }
 
 --- START FILE: out\extension.js.map ---
 
-{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\extension.js.map ---
 
@@ -1012,6 +1201,10 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
     private contextFiles: Map<string, string> = new Map(); 
+    
+    // R5: State for tracking in-editor code suggestions
+    private pendingEdit: { description: string, edit: vscode.WorkspaceEdit, documentUri: vscode.Uri, range: vscode.Range, replacementCode: string } | null = null;
+    private statusDisposables: vscode.Disposable[] = [];
 
     constructor(private readonly _extensionUri: vscode.Uri) {
         this.initializeApiAgent();
@@ -1135,6 +1328,122 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
     
+    /**
+     * R5: Utility to parse the LLM's contextual edit format and return the parts, 
+     * regardless of whether an editor selection exists.
+     */
+    private parseContextualEdit(response: string): { description: string, removedCode: string, replacementCode: string } | null {
+        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
+        const DIFF_SEPARATOR = "[[---]]";
+
+        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
+            return null;
+        }
+
+        // We clear any existing pending edit immediately upon new submission
+        this.clearPendingEdit();
+
+        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
+        const description = parts[0].trim();
+        const editContent = parts.length > 1 ? parts[1].trim() : '';
+
+        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
+
+        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
+        if (diffParts.length !== 2) {
+            console.warn("Malformed CONTEXTUAL_EDIT received.");
+            return null;
+        }
+        
+        const [removedCode, replacementCode] = diffParts;
+
+        return { description, removedCode, replacementCode };
+    }
+
+    /**
+     * R5: Manages the custom VS Code context key and status bar message.
+     */
+    private updatePendingEditContext(hasEdit: boolean) {
+        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
+
+        this.statusDisposables.forEach(d => d.dispose());
+        this.statusDisposables = [];
+
+        if (hasEdit && this.pendingEdit) {
+            const editor = vscode.window.activeTextEditor;
+            // Only show status bar message if the edit applies to the current active document
+            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
+                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
+                this.statusDisposables.push(
+                    // Show a persistent status bar message
+                    vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000) 
+                );
+            }
+        }
+    }
+
+    /**
+     * R5: Clears the pending edit state and status UI.
+     */
+    private clearPendingEdit() {
+        this.pendingEdit = null;
+        this.updatePendingEditContext(false);
+    }
+
+    /**
+     * R5: Accepts and applies the pending in-editor code suggestion.
+     */
+    public async acceptEdit() {
+        if (!this.pendingEdit) {
+            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
+            return;
+        }
+        
+        const currentUri = vscode.window.activeTextEditor?.document.uri;
+
+        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
+            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
+            this.clearPendingEdit(); // Clear old edit if context is lost
+            return;
+        }
+
+        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
+        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
+
+        if (success) {
+            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
+        } else {
+            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
+            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
+            
+            // Fallback to sending the code to the chat view
+            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
+            const fallbackContent = `
+Edit Failed to Apply: ${this.pendingEdit.description}
+
+You can manually insert the replacement code:
+\`\`\`${languageId}
+${this.pendingEdit.replacementCode}
+\`\`\`
+`;
+            this.sendMessageToWebview('response', fallbackContent);
+        }
+
+        this.clearPendingEdit();
+    }
+
+    /**
+     * R5: Rejects the pending in-editor code suggestion.
+     */
+    public rejectEdit() {
+        if (this.pendingEdit) {
+            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
+            this.clearPendingEdit();
+        } else {
+            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
+        }
+    }
+
     private async handlePromptSubmission(userPrompt: string) {
         if (!this._view || !this.apiAgent) { return; }
 
@@ -1144,15 +1453,25 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const selectedText = editor.document.getText(editor.selection);
-        const languageId = editor.document.languageId;
+        const document = editor.document;
+        const selectedText = document.getText(editor.selection);
+        const languageId = document.languageId;
+        const fullDocumentContent = document.getText(); // Get full content of the active file
 
         this.sendMessageToWebview('loading', 'Thinking...');
 
         try {
             let contextBlock = '';
+            
+            // 1. Inject the currently open file content as primary context
+            contextBlock += `\n--- ACTIVE FILE CONTEXT: ${document.fileName} ---\n${fullDocumentContent}\n--- END ACTIVE FILE CONTEXT ---\n`;
+
+            // 2. Inject manually added files (external context)
             if (this.contextFiles.size > 0) {
                 for (const [path, content] of this.contextFiles.entries()) {
+                    // Skip if the context file is the active file (to avoid duplication)
+                    if (path === document.uri.fsPath) continue; 
+                    
                     contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
                 }
             }
@@ -1194,6 +1513,48 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             });
             
             if (response && response.text) {
+                
+                // R5: Check for in-editor contextual edit format
+                const parsedEdit = this.parseContextualEdit(response.text);
+
+                if (parsedEdit) {
+                    const hasSelection = !editor.selection.isEmpty;
+                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
+                    
+                    if (hasSelection) {
+                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
+                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
+                        const workspaceEdit = new vscode.WorkspaceEdit();
+                        workspaceEdit.replace(
+                            document.uri, 
+                            editor.selection, 
+                            parsedEdit.replacementCode
+                        );
+
+                        // Store the pending edit
+                        this.pendingEdit = {
+                            description: parsedEdit.description || 'Code change suggested',
+                            edit: workspaceEdit,
+                            documentUri: document.uri,
+                            range: editor.selection,
+                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
+                        };
+
+                        this.updatePendingEditContext(true);
+                        // Use the description stored in pendingEdit, which includes the fallback
+                        const editDescription = this.pendingEdit!.description;
+                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
+                        return; 
+                        
+                    } else if (!hasSelection) {
+                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
+                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
+                        this.sendMessageToWebview('response', markdownResponse);
+                        return;
+                    }
+                }
+                
+                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
                 this.sendMessageToWebview('response', response.text);
             } else {
                 this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
@@ -1212,10 +1573,17 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         }
     }
     
-    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm', content: string) {
+    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette', content: string) {
         if (this._view) {
             this._view.webview.postMessage({ command: type, content: content });
         }
+    }
+
+    /**
+     * Called by the VS Code command to open the integrated command palette.
+     */
+    public openCommandPalette() {
+        this.sendMessageToWebview('openPalette', '');
     }
 
     private insertCode(code: string) {
@@ -1342,6 +1710,19 @@ export function activate(context: vscode.ExtensionContext) {
     const provider = new GeminiCoderProvider(context.extensionUri);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
+    );
+    
+    // R5: Register Command Palette Command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('gemini-local-coder.openCommandPalette', () => {
+            provider.openCommandPalette();
+        })
+    );
+    
+    // R5: Register Edit Commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()),
+        vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit())
     );
 
     const inlineProvider = new GeminiInlineCompletionProvider();
@@ -1637,74 +2018,38 @@ document.addEventListener('DOMContentLoaded', () => {
             item.style.display = text.includes(filter) ? 'flex' : 'none';
         });
     });
-
-
-    // R2 & R3: Enhanced formatting for Code Responses and Contextual Edits
-    function formatResponse(responseText) {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-
-        // Refactoring Change #6: Clean response text proactively
-        let plainText = responseText;
-        let isContextualEdit = false;
-
-        // 1. Check for Contextual Edit Structure
-        if (responseText.includes(CONTEXTUAL_EDIT_MARKER)) {
+    
+    // R4: Command Execution from Palette
+    paletteInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             
-            const parts = responseText.split(CONTEXTUAL_EDIT_MARKER);
-            const description = parts[0].trim();
-            const editContent = parts.length > 1 ? parts[1].trim() : '';
+            const prompt = paletteInput.value.trim();
+            if (!prompt) return;
 
-            const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
+            // Send command as a prompt, then hide the palette
+            postMessage('submitPrompt', { text: prompt });
+            paletteInput.value = '';
+            togglePalette(false);
             
-            if (diffParts.length === 2) {
-                isContextualEdit = true;
-                const [removedRaw, addedRaw] = diffParts;
-                
-                let diffHtml = '';
-                const replacementCode = addedRaw; // Use the raw added code for replacement action
+            // Show loading message in the main chat view
+            appendMessage('loading', 'Executing command...');
 
-                // Simulate lines before/after the change for visual context
-                diffHtml += `<div class="diff-line diff-context">// ... code context ...</div>`;
-
-                // Removed lines
-                if (removedRaw) {
-                    removedRaw.split('\n').forEach(line => {
-                        diffHtml += `<div class="diff-line diff-removed">${escapeHtml(line)}</div>`;
-                    });
-                }
-                
-                // Added lines
-                if (addedRaw) {
-                     addedRaw.split('\n').forEach(line => {
-                        diffHtml += `<div class="diff-line diff-added">${escapeHtml(line)}</div>`;
-                    });
-                }
-                
-                diffHtml += `<div class="diff-line diff-context">// ... code context ...</div>`;
-                
-                // Build the final contextual block
-                let formattedHtml = description ? `<p>${escapeHtml(description)}</p>` : '';
-                
-                formattedHtml += `
-                    <div class="code-edit-block">
-                        <pre>${diffHtml}</pre>
-                        <!-- R3: Action Controls -->
-                        <div class="context-actions">
-                            <button class="reject-button" data-type="reject">Reject</button>
-                            <button class="accept-button" data-type="accept" data-code="${escapeHtml(replacementCode)}">Accept Edit</button>
-                        </div>
-                    </div>
-                `;
-                
-                return formattedHtml;
-            }
-            
-            // If the markers were found but structure failed, sanitize the raw text
-            plainText = plainText.replace(CONTEXTUAL_EDIT_MARKER, '').replace(DIFF_SEPARATOR, '');
+            // Disable main input area while processing
+            promptInput.disabled = true;
+            sendButton.disabled = true;
         }
+    });
 
-        // 2. Existing logic for standard markdown code blocks (only run if not a successful contextual edit)
+
+    // R2 & R3: Enhanced formatting for Code Responses (Simplified)
+    function formatResponse(responseText) {
+        
+        // Treat contextual edit markers as plain text if they reach the webview, 
+        // as successful in-editor edits are intercepted in the extension host.
+        const plainText = responseText;
+
+        // Existing logic for standard markdown code blocks
         const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
         let match;
         let lastIndex = 0;
@@ -1786,34 +2131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // R3: Attach listeners for contextual edit action buttons
-    function attachContextualActionListeners() {
-        document.querySelectorAll('.context-actions .accept-button').forEach(button => {
-            button.onclick = (e) => {
-                // Refactoring Change #8: Acceptance logic remains stable, relying on host for replacement
-                const code = e.currentTarget.getAttribute('data-code');
-                vscode.postMessage({ command: 'replaceSelection', code: code });
-                
-                // Optional: Visually mark as accepted
-                const editBlock = e.currentTarget.closest('.code-edit-block');
-                if (editBlock) {
-                    editBlock.classList.add('accepted');
-                    // Disable buttons after accepting
-                    editBlock.querySelectorAll('button').forEach(b => b.disabled = true);
-                }
-            };
-        });
-        
-        document.querySelectorAll('.context-actions .reject-button').forEach(button => {
-            button.onclick = (e) => {
-                // Remove the proposed edit block visually upon rejection
-                const editBlock = e.currentTarget.closest('.code-edit-block');
-                if (editBlock) {
-                    editBlock.remove();
-                }
-            };
-        });
-    }
+    // Note: Contextual edit action listeners removed as in-editor edits are now handled natively via commands.
 
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
@@ -1856,6 +2174,10 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'newChatConfirm':
                 chatHistory.innerHTML = initialWelcomeMessage;
                 break;
+            
+            case 'openPalette':
+                togglePalette(true);
+                break;
                 
             case 'loading':
                 appendMessage('loading', content);
@@ -1864,7 +2186,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formattedHtml = formatResponse(content);
                 appendMessage('assistant', formattedHtml, false); 
                 attachCodeActionListeners();
-                attachContextualActionListeners();
                 break;
             case 'error':
                 appendMessage('error', content);
@@ -2026,71 +2347,7 @@ body {
     background-color: var(--vscode-button-hoverBackground);
 }
 
-/* R2: Contextual Editing Simulation */
-.code-edit-block {
-    margin: 15px 0;
-    background-color: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-sideBar-border);
-    border-radius: 4px;
-    padding: 0;
-    overflow: hidden;
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: 13px;
-    line-height: 1.4;
-}
 
-.code-edit-block pre {
-    margin: 0;
-}
-
-.diff-line {
-    padding: 2px 10px;
-    white-space: pre-wrap;
-    word-break: break-all;
-}
-.diff-context {
-    opacity: 0.5;
-}
-
-.diff-removed {
-    background-color: var(--vscode-diffEditor-removedTextBackground); /* Red tint */
-    color: var(--vscode-diffEditor-removedText);
-    opacity: 0.8;
-}
-
-.diff-added {
-    background-color: var(--vscode-diffEditor-insertedTextBackground); /* Green tint */
-    color: var(--vscode-diffEditor-insertedText);
-}
-
-/* R3: Action Controls */
-.context-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 8px 10px;
-    border-top: 1px solid var(--vscode-sideBar-border);
-    background-color: var(--vscode-editorWidget-background);
-}
-
-.context-actions button {
-    padding: 5px 12px;
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.context-actions .accept-button {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-}
-
-.context-actions .reject-button {
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-}
 
 
 /* --- Bottom Controls Wrapper --- */

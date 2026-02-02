@@ -123,48 +123,105 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // R2 & R3: Enhanced formatting for Code Responses (Simplified)
+    // R2 & R3: Enhanced formatting for Code Responses (Handling FIND/REPLACE blocks)
     function formatResponse(responseText) {
+        // Regex for FIND/REPLACE blocks. Assumes structure: --- FIND --- ```lang...``` --- REPLACE --- ```lang...```
+        const findReplaceRegex = /---\s*FIND\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```\s*---\s*REPLACE\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```/gi;
         
-        // Treat contextual edit markers as plain text if they reach the webview, 
-        // as successful in-editor edits are intercepted in the extension host.
-        const plainText = responseText;
-
-        // Existing logic for standard markdown code blocks
-        const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
-        let match;
-        let lastIndex = 0;
+        // Regex for standard standalone markdown blocks
+        const standardCodeRegex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
+        
         let formattedHtml = '';
+        let lastIndex = 0;
         let codeFound = false;
-
-        while ((match = regex.exec(plainText)) !== null) {
-            codeFound = true;
-            const textBefore = plainText.substring(lastIndex, match.index).trim();
-            const codeContent = match[1];
-
-            if (textBefore) {
-                formattedHtml += `<p>${textBefore}</p>`;
+        
+        const responseSegments = [];
+        
+        // 1. Extract and process FIND/REPLACE blocks first
+        let match;
+        while ((match = findReplaceRegex.exec(responseText)) !== null) {
+            // Push text content before this block
+            if (match.index > lastIndex) {
+                responseSegments.push({ type: 'text', content: responseText.substring(lastIndex, match.index) });
             }
-
-            formattedHtml += `
-                <div class="code-block">
-                    <pre>${escapeHtml(codeContent)}</pre>
-                    <div class="code-actions">
-                        <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
-                        <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
-                    </div>
-                </div>
-            `;
+            
+            const findContent = match[1].trim();
+            const replaceContent = match[2].trim();
+            
+            responseSegments.push({ type: 'findReplace', find: findContent, replace: replaceContent });
             lastIndex = match.index + match[0].length;
         }
-
-        const textAfter = plainText.substring(lastIndex).trim();
-        if (textAfter) {
-            formattedHtml += `<p>${textAfter}</p>`;
+        
+        // Push remaining text content
+        if (lastIndex < responseText.length) {
+            responseSegments.push({ type: 'text', content: responseText.substring(lastIndex) });
         }
         
-        if (!codeFound && plainText.trim()) {
-            formattedHtml = `<p>${plainText.trim()}</p>`;
+        // 2. Process segments and render
+        for (const segment of responseSegments) {
+            if (segment.type === 'findReplace') {
+                codeFound = true;
+                formattedHtml += `
+                    <div class="code-diff-block">
+                        <div class="diff-header code-header">
+                            <span>--- FIND ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.find)}" title="Copy FIND block">Copy</button>
+                        </div>
+                        <div class="find-block">
+                            <pre>${escapeHtml(segment.find)}</pre>
+                        </div>
+                        <div class="diff-header code-header">
+                            <span>--- REPLACE ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.replace)}" title="Copy REPLACE block">Copy</button>
+                        </div>
+                        <div class="replace-block">
+                            <pre>${escapeHtml(segment.replace)}</pre>
+                            <div class="code-actions">
+                                <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (segment.type === 'text') {
+                let text = segment.content;
+                let standardMatch;
+                let textLastIndex = 0;
+                
+                // 3. Look for standard code blocks within the remaining text segments
+                while ((standardMatch = standardCodeRegex.exec(text)) !== null) {
+                    codeFound = true;
+                    const textBefore = text.substring(textLastIndex, standardMatch.index).trim();
+                    const codeContent = standardMatch[1];
+                    
+                    if (textBefore) {
+                         formattedHtml += `<p>${textBefore}</p>`;
+                    }
+                    
+                    formattedHtml += `
+                        <div class="code-block">
+                            <div class="code-header standard-header">
+                                <button class="copy-button" data-code="${escapeHtml(codeContent)}" title="Copy code block">Copy</button>
+                            </div>
+                            <pre>${escapeHtml(codeContent)}</pre>
+                            <div class="code-actions">
+                                <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
+                                <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
+                            </div>
+                        </div>
+                    `;
+                    textLastIndex = standardMatch.index + standardMatch[0].length;
+                }
+                
+                const textAfter = text.substring(textLastIndex).trim();
+                if (textAfter) {
+                    formattedHtml += `<p>${textAfter}</p>`;
+                }
+            }
+        }
+        
+        if (!codeFound && responseText.trim()) {
+            // Handle plain text response if no blocks were found
+            formattedHtml = `<p>${responseText.trim()}</p>`;
         }
         
         return formattedHtml;
@@ -195,8 +252,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function attachCopyListeners() {
+        document.querySelectorAll('.copy-button').forEach(button => {
+            button.onclick = (e) => {
+                const code = e.currentTarget.getAttribute('data-code');
+                if (code) {
+                    navigator.clipboard.writeText(code).then(() => {
+                        const originalText = button.innerHTML;
+                        button.innerHTML = 'Copied!';
+                        // Reset text after 2 seconds
+                        setTimeout(() => {
+                            button.innerHTML = originalText;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        button.innerHTML = 'Error';
+                    });
+                }
+            };
+        });
+    }
+
     // R3: Attach listeners for code action buttons (standard blocks)
     function attachCodeActionListeners() {
+        attachCopyListeners(); // Attach copy listeners whenever code actions are attached
+
         document.querySelectorAll('.action-insert').forEach(button => {
             button.onclick = (e) => {
                 const code = e.currentTarget.getAttribute('data-code');
@@ -212,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Note: Contextual edit action listeners removed as in-editor edits are now handled natively via commands.
+
 
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
@@ -233,6 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch (message.command) {
             case 'updateStatus': 
+                // Check if we just transitioned from inactive (hidden config) to active
+                const wasActive = keyStatusIndicator.classList.contains('active');
+                
                 saveKeyButton.textContent = 'Save & Activate';
                 apiKeyInput.disabled = false;
                 saveKeyButton.disabled = false;
@@ -242,9 +325,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     keyStatusIndicator.title = 'API Key Status: Active';
                     configPanel.classList.add('hidden');
                     contextHeader.classList.remove('hidden'); 
+                    
+                    if (!wasActive && chatHistory.children.length === 0) {
+                        // Display clear confirmation if key was just activated and chat was empty
+                        appendMessage('success', 'Gemini API Key successfully validated and activated.');
+                        // Reinitialize welcome message
+                        chatHistory.innerHTML += initialWelcomeMessage;
+                    }
+
                 } else {
                     keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid';
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Please enter your key below.';
                     configPanel.classList.remove('hidden');
                     contextHeader.classList.add('hidden'); 
                     chatHistory.innerHTML = ''; // Clear chat history when key is missing
@@ -320,8 +411,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Manipulation Helpers
     function appendMessage(type, content, isText = true) {
         const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message', type);
-        
+        // Handle custom styling for API key success notification
+        if (type === 'success') {
+             messageDiv.classList.add('message', 'system');
+             messageDiv.classList.add('success');
+        } else {
+            messageDiv.classList.add('message', type);
+        }
+
         if (isText) {
             messageDiv.textContent = content;
         } else {
