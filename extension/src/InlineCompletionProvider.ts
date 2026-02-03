@@ -20,7 +20,7 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
     }
 
     private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");

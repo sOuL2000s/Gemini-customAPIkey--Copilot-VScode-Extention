@@ -1,22 +1,45 @@
 // src/ConfigurationManager.ts
 import * as vscode from 'vscode';
 
+type ApiProfiles = { [key: string]: string };
+
 export class ConfigurationManager {
     private static readonly CONFIG_SECTION = 'gemini';
 
     /**
-     * Retrieves the Gemini API Key securely from the VS Code configuration.
-     * @returns The API key string, or undefined if not set or empty.
+     * Retrieves the currently active Gemini API Key from the configured profiles.
+     * @returns The active API key string, or undefined if not set or invalid.
      */
-    public static getApiKey(): string | undefined {
+    public static getActiveApiKey(): string | undefined {
         const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
-        const apiKey = config.get<string>('apiKey');
+        const activeProfileName = config.get<string>('activeProfile');
+        const profiles = config.get<ApiProfiles>('profiles') || {};
         
+        if (!activeProfileName || activeProfileName.trim() === '') {
+            return undefined;
+        }
+        
+        const apiKey = profiles[activeProfileName];
+
         // Safety check: Return undefined if the key is undefined or an empty string after trimming.
         if (!apiKey || apiKey.trim() === '') {
             return undefined;
         }
         return apiKey.trim();
+    }
+
+    /**
+     * Retrieves all configured API key profiles.
+     */
+    public static getProfiles(): { activeName: string | undefined, profiles: ApiProfiles } {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        const activeProfileName = config.get<string>('activeProfile');
+        const profiles = config.get<ApiProfiles>('profiles') || {};
+
+        return {
+            activeName: activeProfileName,
+            profiles: profiles
+        };
     }
 
     /**

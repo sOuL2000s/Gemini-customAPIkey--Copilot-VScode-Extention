@@ -204,12 +204,14 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    /* Adding a subtle shadow to emphasize the control area separation */
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1); 
 }
 
 /* --- F2: Configuration Panel (Inline Key Setup) --- */
 #config-panel {
     display: flex;
-    flex-wrap: nowrap; /* Keep them inline unless screen is tiny */
+    flex-wrap: wrap; /* Allow wrapping for responsiveness */
     align-items: center;
     gap: 8px;
     padding: 8px;
@@ -218,28 +220,49 @@ body {
     border: 1px solid var(--vscode-editorWidget-border);
 }
 
-#api-key-input {
-    flex-grow: 1;
-    min-width: 50px; /* Ensure minimum space */
+#config-panel input[type="text"],
+#config-panel input[type="password"] {
+    /* Use 100% width when wrapped, or flexible when inline */
+    flex: 1 1 40%; 
+    min-width: 50px;
     padding: 0 8px;
     height: 30px;
     border: 1px solid var(--vscode-input-border);
     background-color: var(--vscode-inputBackground);
     color: var(--vscode-inputForeground);
     border-radius: 3px;
+    line-height: 30px; /* Vertically center placeholder text */
 }
+
+#profile-name-input {
+    /* No special flex-basis needed, general input styles handle it */
+}
+
+#api-key-input {
+    /* No special flex-basis needed, general input styles handle it */
+}
+
 #save-key-button {
     white-space: nowrap;
-    flex-shrink: 0; /* Prevent button from shrinking */
+    flex: 1 1 100%; /* Force button to take full width when wrapped */
     min-height: 30px;
+}
+
+/* Ensure inputs stack if total width is small */
+@media (max-width: 250px) {
+    #config-panel input[type="text"],
+    #config-panel input[type="password"] {
+        flex: 1 1 100%;
+    }
 }
 
 
 /* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
 #context-header {
     display: flex;
-    align-items: center;
-    background-color: var(--vscode-inputBackground);
+    flex-direction: column; /* Start with vertical layout for narrow views */
+    align-items: stretch;
+    background-color: var(--vscode-editor-background); 
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
     min-height: 38px;
@@ -248,11 +271,54 @@ body {
 
 #context-file-controls {
     display: flex;
-    gap: 5px;
-    padding-right: 10px;
-    /* Removed redundant border-right to minimize visual noise, relying on spacing */
+    gap: 8px; 
+    padding-right: 0; /* Remove padding right */
+    border-right: none; /* Remove separator */
+    border-bottom: 1px solid var(--vscode-input-border); /* Add bottom separator */
+    padding-bottom: 5px;
+    margin-bottom: 5px;
     align-items: center;
+    flex-shrink: 0;
+    justify-content: space-between; /* Spread controls */
 }
+
+/* Profile Display */
+#profile-display {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: var(--vscode-list-deemphasizedForeground);
+    flex-shrink: 1; /* Allow profile selector to shrink */
+}
+
+#profile-selector {
+    background-color: var(--vscode-inputBackground);
+    color: var(--vscode-inputForeground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin-left: 5px;
+    margin-right: 5px;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    text-transform: capitalize; /* Make selected profile look nice */
+}
+#profile-selector:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+#edit-profiles-button {
+    background: none;
+    border: none;
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    margin-left: 5px;
+}
+
 
 #key-status-indicator {
     width: 8px;
@@ -272,6 +338,7 @@ body {
     display: flex;
     align-items: center;
     min-height: 28px;
+    overflow-x: hidden; /* Prevent horizontal overflow from file tags */
 }
 
 #context-placeholder {
@@ -292,12 +359,21 @@ body {
 .context-file-tag {
     display: inline-flex;
     align-items: center;
-    background-color: var(--vscode-badge-background); /* Use badge color for a distinctive look */
+    background-color: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
     border-radius: 3px;
     padding: 3px 6px;
     font-size: 12px;
     line-height: 1;
+    /* Ensure long filenames don't ruin layout */
+    max-width: 120px; 
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.context-file-tag span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .context-file-tag button {
     margin-left: 5px;
@@ -340,9 +416,10 @@ body {
     outline: none;
 }
 
-/* --- Icon Buttons (New Chat, Attachment) --- */
-#new-chat-button, 
-#add-context-file-button {
+/* --- Icon Buttons (Menu, Attachment, New Chat) --- */
+#menu-button, 
+#add-context-file-button,
+#new-chat-button {
     background: none;
     border: none;
     color: var(--vscode-foreground);
@@ -354,11 +431,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 3px;
 }
 
-#new-chat-button:hover,
-#add-context-file-button:hover {
+#menu-button:hover,
+#add-context-file-button:hover,
+#new-chat-button:hover {
     opacity: 1;
+    background-color: var(--vscode-list-hoverBackground);
 }
 
 /* --- Send Button (Arrow Icon) --- */
@@ -445,6 +525,58 @@ body {
     opacity: 0.6;
 }
 /* Ensure the palette responds gracefully to narrow sidebars */
+/* --- NEW: Options Menu (Three Dot Menu Dropdown) --- */
+#options-menu {
+    position: absolute; /* Relative to body/webview viewport */
+    z-index: 50;
+    width: 200px;
+    background-color: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    padding: 5px 0;
+}
+#options-menu.hidden {
+    display: none;
+}
+
+#menu-options-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 13px;
+}
+
+#menu-options-list li {
+    padding: 6px 15px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--vscode-menu-foreground);
+}
+
+#menu-options-list li:hover {
+    background-color: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+
+/* Media query for wider sidebars (e.g., > 300px) */
+@media (min-width: 300px) {
+    #context-header {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    #context-file-controls {
+        border-right: 1px solid var(--vscode-input-border);
+        border-bottom: none;
+        padding-right: 10px;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+}
+
+
 @media (max-width: 350px) {
     #command-palette {
         width: 95%;

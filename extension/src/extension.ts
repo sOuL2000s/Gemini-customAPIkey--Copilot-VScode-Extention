@@ -37,7 +37,8 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     }
     
     private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager.getActiveApiKey();
+        
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
         } else {
@@ -48,9 +49,12 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
     private postViewStatus() {
         if (this._view) {
+            const { activeName, profiles } = ConfigurationManager.getProfiles();
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
                 keyStatus: this.apiAgent !== null,
+                activeProfile: activeName,
+                availableProfiles: Object.keys(profiles),
                 contextFiles: Array.from(this.contextFiles.keys())
             });
         }
@@ -87,6 +91,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'saveKey':
                     this.handleSaveKey(message.key);
                     return;
+                case 'openSettings':
+                    this.handleOpenSettings(message.settingKey);
+                    return;
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -103,14 +110,34 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
 
-    private async handleSaveKey(key: string) {
+    private async handleSaveKey(key: string, profileName: string = 'default') {
         const trimmedKey = key.trim();
         if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update(
-                'apiKey', 
-                trimmedKey, 
-                vscode.ConfigurationTarget.Global
-            );
+            const config = vscode.workspace.getConfiguration('gemini');
+            const profiles = config.get<{[key: string]: string}>('profiles') || {};
+            
+            // Allow specifying profileName, defaulting to 'default'
+            if (!profileName || profileName.trim() === '') {
+                 profileName = 'default';
+            }
+            
+            profiles[profileName] = trimmedKey;
+            
+            await config.update('profiles', profiles, vscode.ConfigurationTarget.Global);
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            
+            // Re-initialize agent to validate the new key
+            this.initializeApiAgent();
+        }
+    }
+
+    private async handleSwitchProfile(profileName: string) {
+        if (profileName) {
+            const config = vscode.workspace.getConfiguration('gemini');
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            
+            // Re-initialize agent to load the key from the new profile
+            this.initializeApiAgent();
         }
     }
 
@@ -259,6 +286,12 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     public openCommandPalette() {
         this.sendMessageToWebview('openPalette', '');
     }
+    
+    private handleOpenSettings(settingKey: string) {
+        if (settingKey) {
+            vscode.commands.executeCommand('workbench.action.openSettings', settingKey);
+        }
+    }
 
     private insertCode(code: string) {
         const editor = vscode.window.activeTextEditor;
@@ -310,12 +343,19 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 <div id="bottom-controls">
                     
                     <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
+                        <input type="text" id="profile-name-input" placeholder="Profile Name (e.g., 'work', 'personal')">
+                        <input type="password" id="api-key-input" placeholder="API Key">
                         <button id="save-key-button">Save & Activate</button>
                     </div>
 
                     <div id="context-header">
                         <div id="context-file-controls">
+                            
+                            <div id="profile-display">
+                                <label for="profile-selector" id="profile-label">Profile:</label>
+                                <select id="profile-selector" title="Select Active Gemini API Profile"></select>
+                                <button id="edit-profiles-button" title="Add/Edit API Keys">Edit Keys</button>
+                            </div>
                             
                             <button id="add-context-file-button" title="Add file context (File Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -330,6 +370,13 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+
+                            <button id="menu-button" title="More Options (Three Dot Menu)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+                                </svg>
+                            </button>
+
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -367,6 +414,15 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             <span>/explain this block</span>
                             <span class="palette-shortcut">Ctrl+E</span>
                         </li>
+                    </ul>
+                </div>
+
+                <!-- NEW: Three Dot Menu Structure -->
+                <div id="options-menu" class="hidden">
+                    <ul id="menu-options-list">
+                        <li id="menu-edit-keys">Add/Edit API Keys</li>
+                        <li id="menu-open-profiles-settings">Open gemini.profiles in Settings</li>
+                        <li id="menu-latency-settings">Adjust Latency/Debounce Settings</li>
                     </ul>
                 </div>
 

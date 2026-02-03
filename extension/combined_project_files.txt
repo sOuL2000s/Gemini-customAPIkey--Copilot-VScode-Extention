@@ -5,7 +5,6 @@
 .vscode-test-web/
 .git/
 .vscode/
-node_modules/
 src/**/*.ts
 *.map
 tsconfig.json
@@ -64,17 +63,8 @@ tsconfig.json
         "command": "gemini-local-coder.openCommandPalette",
         "title": "Gemini Coder: Open Command Palette",
         "category": "Gemini Coder"
-      },
-      {
-        "command": "gemini-local-coder.acceptEdit",
-        "title": "Gemini Coder: Accept Suggested Edit (Alt+A)",
-        "category": "Gemini Coder"
-      },
-      {
-        "command": "gemini-local-coder.rejectEdit",
-        "title": "Gemini Coder: Reject Suggested Edit (Alt+R)",
-        "category": "Gemini Coder"
       }
+
     ],
     "keybindings": [
       {
@@ -82,29 +72,22 @@ tsconfig.json
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g",
         "when": "editorTextFocus"
-      },
-      {
-        "command": "gemini-local-coder.acceptEdit",
-        "key": "alt+a",
-        "mac": "alt+a",
-        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
-      },
-      {
-        "command": "gemini-local-coder.rejectEdit",
-        "key": "alt+r",
-        "mac": "alt+r",
-        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
       }
+
     ],
     "configuration": {
       "title": "Gemini Coder Configuration",
       "properties": {
-        "gemini.apiKey": {
+        "gemini.profiles": {
+          "type": "object",
+          "default": {},
+          "description": "A map of named Gemini API keys for different profiles (e.g., {'work': 'AIza...key1', 'personal': 'AIza...key2'}). Keys are automatically stored securely.",
+          "scope": "resource"
+        },
+        "gemini.activeProfile": {
           "type": "string",
           "default": "",
-          "description": "Your Google Gemini API Key. Required for all AI suggestions.",
-          "scope": "resource",
-          "isSecret": true
+          "description": "The name of the profile currently used for API calls (must match a name in gemini.profiles)."
         },
         "gemini.latency.debounceMs": {
           "type": "number",
@@ -121,7 +104,8 @@ tsconfig.json
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.108.1",
@@ -216,17 +200,34 @@ exports.ConfigurationManager = void 0;
 const vscode = __importStar(require("vscode"));
 class ConfigurationManager {
     /**
-     * Retrieves the Gemini API Key securely from the VS Code configuration.
-     * @returns The API key string, or undefined if not set or empty.
+     * Retrieves the currently active Gemini API Key from the configured profiles.
+     * @returns The active API key string, or undefined if not set or invalid.
      */
-    static getApiKey() {
+    static getActiveApiKey() {
         const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
-        const apiKey = config.get('apiKey');
+        const activeProfileName = config.get('activeProfile');
+        const profiles = config.get('profiles') || {};
+        if (!activeProfileName || activeProfileName.trim() === '') {
+            return undefined;
+        }
+        const apiKey = profiles[activeProfileName];
         // Safety check: Return undefined if the key is undefined or an empty string after trimming.
         if (!apiKey || apiKey.trim() === '') {
             return undefined;
         }
         return apiKey.trim();
+    }
+    /**
+     * Retrieves all configured API key profiles.
+     */
+    static getProfiles() {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        const activeProfileName = config.get('activeProfile');
+        const profiles = config.get('profiles') || {};
+        return {
+            activeName: activeProfileName,
+            profiles: profiles
+        };
     }
     /**
      * Retrieves the configured debounce delay in milliseconds, respecting bounds.
@@ -247,7 +248,7 @@ ConfigurationManager.CONFIG_SECTION = 'gemini';
 
 --- START FILE: out\ConfigurationManager.js.map ---
 
-{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAEjC,MAAa,oBAAoB;IAG7B;;;OAGG;IACI,MAAM,CAAC,SAAS;QACnB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,MAAM,MAAM,GAAG,MAAM,CAAC,GAAG,CAAS,QAAQ,CAAC,CAAC;QAE5C,4FAA4F;QAC5F,IAAI,CAAC,MAAM,IAAI,MAAM,CAAC,IAAI,EAAE,KAAK,EAAE,EAAE,CAAC;YAClC,OAAO,SAAS,CAAC;QACrB,CAAC;QACD,OAAO,MAAM,CAAC,IAAI,EAAE,CAAC;IACzB,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;;AA5BL,oDA6BC;AA5B2B,mCAAc,GAAG,QAAQ,CAAC"}
+{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAIjC,MAAa,oBAAoB;IAG7B;;;OAGG;IACI,MAAM,CAAC,eAAe;QACzB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,MAAM,iBAAiB,GAAG,MAAM,CAAC,GAAG,CAAS,eAAe,CAAC,CAAC;QAC9D,MAAM,QAAQ,GAAG,MAAM,CAAC,GAAG,CAAc,UAAU,CAAC,IAAI,EAAE,CAAC;QAE3D,IAAI,CAAC,iBAAiB,IAAI,iBAAiB,CAAC,IAAI,EAAE,KAAK,EAAE,EAAE,CAAC;YACxD,OAAO,SAAS,CAAC;QACrB,CAAC;QAED,MAAM,MAAM,GAAG,QAAQ,CAAC,iBAAiB,CAAC,CAAC;QAE3C,4FAA4F;QAC5F,IAAI,CAAC,MAAM,IAAI,MAAM,CAAC,IAAI,EAAE,KAAK,EAAE,EAAE,CAAC;YAClC,OAAO,SAAS,CAAC;QACrB,CAAC;QACD,OAAO,MAAM,CAAC,IAAI,EAAE,CAAC;IACzB,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,WAAW;QACrB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,MAAM,iBAAiB,GAAG,MAAM,CAAC,GAAG,CAAS,eAAe,CAAC,CAAC;QAC9D,MAAM,QAAQ,GAAG,MAAM,CAAC,GAAG,CAAc,UAAU,CAAC,IAAI,EAAE,CAAC;QAE3D,OAAO;YACH,UAAU,EAAE,iBAAiB;YAC7B,QAAQ,EAAE,QAAQ;SACrB,CAAC;IACN,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;;AAjDL,oDAkDC;AAjD2B,mCAAc,GAAG,QAAQ,CAAC"}
 
 --- END FILE: out\ConfigurationManager.js.map ---
 
@@ -433,14 +434,11 @@ class GeminiCoderProvider {
         this.apiAgent = null;
         this.chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
         this.contextFiles = new Map();
-        // R5: State for tracking in-editor code suggestions
-        this.pendingEdit = null;
-        this.statusDisposables = [];
         this.initializeApiAgent();
         vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
     }
     initializeApiAgent() {
-        const apiKey = ConfigurationManager_1.ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager_1.ConfigurationManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new genai_1.GoogleGenAI({ apiKey });
         }
@@ -451,9 +449,12 @@ class GeminiCoderProvider {
     }
     postViewStatus() {
         if (this._view) {
+            const { activeName, profiles } = ConfigurationManager_1.ConfigurationManager.getProfiles();
             this._view.webview.postMessage({
                 command: 'updateStatus',
                 keyStatus: this.apiAgent !== null,
+                activeProfile: activeName,
+                availableProfiles: Object.keys(profiles),
                 contextFiles: Array.from(this.contextFiles.keys())
             });
         }
@@ -483,6 +484,9 @@ class GeminiCoderProvider {
                 case 'saveKey':
                     this.handleSaveKey(message.key);
                     return;
+                case 'openSettings':
+                    this.handleOpenSettings(message.settingKey);
+                    return;
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -497,10 +501,28 @@ class GeminiCoderProvider {
         this.postViewStatus();
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
-    async handleSaveKey(key) {
+    async handleSaveKey(key, profileName = 'default') {
         const trimmedKey = key.trim();
         if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update('apiKey', trimmedKey, vscode.ConfigurationTarget.Global);
+            const config = vscode.workspace.getConfiguration('gemini');
+            const profiles = config.get('profiles') || {};
+            // Allow specifying profileName, defaulting to 'default'
+            if (!profileName || profileName.trim() === '') {
+                profileName = 'default';
+            }
+            profiles[profileName] = trimmedKey;
+            await config.update('profiles', profiles, vscode.ConfigurationTarget.Global);
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            // Re-initialize agent to validate the new key
+            this.initializeApiAgent();
+        }
+    }
+    async handleSwitchProfile(profileName) {
+        if (profileName) {
+            const config = vscode.workspace.getConfiguration('gemini');
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            // Re-initialize agent to load the key from the new profile
+            this.initializeApiAgent();
         }
     }
     async handleAddFileContext() {
@@ -536,103 +558,6 @@ class GeminiCoderProvider {
         this.contextFiles.delete(uriPath);
         this.postViewStatus();
     }
-    /**
-     * R5: Utility to parse the LLM's contextual edit format and return the parts,
-     * regardless of whether an editor selection exists.
-     */
-    parseContextualEdit(response) {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
-            return null;
-        }
-        // We clear any existing pending edit immediately upon new submission
-        this.clearPendingEdit();
-        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
-        const description = parts[0].trim();
-        const editContent = parts.length > 1 ? parts[1].trim() : '';
-        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
-        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
-        if (diffParts.length !== 2) {
-            console.warn("Malformed CONTEXTUAL_EDIT received.");
-            return null;
-        }
-        const [removedCode, replacementCode] = diffParts;
-        return { description, removedCode, replacementCode };
-    }
-    /**
-     * R5: Manages the custom VS Code context key and status bar message.
-     */
-    updatePendingEditContext(hasEdit) {
-        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
-        this.statusDisposables.forEach(d => d.dispose());
-        this.statusDisposables = [];
-        if (hasEdit && this.pendingEdit) {
-            const editor = vscode.window.activeTextEditor;
-            // Only show status bar message if the edit applies to the current active document
-            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
-                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
-                this.statusDisposables.push(
-                // Show a persistent status bar message
-                vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000));
-            }
-        }
-    }
-    /**
-     * R5: Clears the pending edit state and status UI.
-     */
-    clearPendingEdit() {
-        this.pendingEdit = null;
-        this.updatePendingEditContext(false);
-    }
-    /**
-     * R5: Accepts and applies the pending in-editor code suggestion.
-     */
-    async acceptEdit() {
-        if (!this.pendingEdit) {
-            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
-            return;
-        }
-        const currentUri = vscode.window.activeTextEditor?.document.uri;
-        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
-            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
-            this.clearPendingEdit(); // Clear old edit if context is lost
-            return;
-        }
-        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
-        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
-        if (success) {
-            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
-        }
-        else {
-            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
-            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
-            // Fallback to sending the code to the chat view
-            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
-            const fallbackContent = `
-Edit Failed to Apply: ${this.pendingEdit.description}
-
-You can manually insert the replacement code:
-\`\`\`${languageId}
-${this.pendingEdit.replacementCode}
-\`\`\`
-`;
-            this.sendMessageToWebview('response', fallbackContent);
-        }
-        this.clearPendingEdit();
-    }
-    /**
-     * R5: Rejects the pending in-editor code suggestion.
-     */
-    rejectEdit() {
-        if (this.pendingEdit) {
-            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
-            this.clearPendingEdit();
-        }
-        else {
-            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
-        }
-    }
     async handlePromptSubmission(userPrompt) {
         if (!this._view || !this.apiAgent) {
             return;
@@ -660,24 +585,30 @@ ${this.pendingEdit.replacementCode}
                     contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
                 }
             }
-            // System instruction remains to enforce the custom chat format
+            // System instruction enforces the requested chat output format (Find/Replace blocks)
             const systemInstruction = `
-                You are an expert Senior Software Engineer specializing in ${languageId}.
-                Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
+                You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
+                Your goal is to assist the user with code modification, generation, debugging, and refactoring.
                 ${contextBlock}
                 
-                CRITICAL CONSTRAINT: If the user requests any code modification, update, or insertion, you MUST respond using ONE of the following formats. DO NOT use both.
+                CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
+                DO NOT use conversational filler, explanations, or commentary outside of these structures.
                 
-                1. A standard markdown code block (\`\`\`language\`).
-                2. The precise contextual edit format (for inline changes to the selected code):
+                1. For code modifications (deletion, replacement, or insertion within existing code):
                 
-                [Brief description of the change]
-                [[CONTEXTUAL_EDIT]]
-                [Lines of existing code to be REMOVED (keep original indentation)]
-                [[---]]
-                [Lines of new code to be ADDED (with correct indentation)]
-
-                DO NOT add extra commentary outside the chosen block structure.
+                --- FIND ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                --- REPLACE ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
             `;
             const userContent = `
                 --- Selected Code Context ---
@@ -694,38 +625,7 @@ ${this.pendingEdit.replacementCode}
                 }
             });
             if (response && response.text) {
-                // R5: Check for in-editor contextual edit format
-                const parsedEdit = this.parseContextualEdit(response.text);
-                if (parsedEdit) {
-                    const hasSelection = !editor.selection.isEmpty;
-                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
-                    if (hasSelection) {
-                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
-                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
-                        const workspaceEdit = new vscode.WorkspaceEdit();
-                        workspaceEdit.replace(document.uri, editor.selection, parsedEdit.replacementCode);
-                        // Store the pending edit
-                        this.pendingEdit = {
-                            description: parsedEdit.description || 'Code change suggested',
-                            edit: workspaceEdit,
-                            documentUri: document.uri,
-                            range: editor.selection,
-                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
-                        };
-                        this.updatePendingEditContext(true);
-                        // Use the description stored in pendingEdit, which includes the fallback
-                        const editDescription = this.pendingEdit.description;
-                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
-                        return;
-                    }
-                    else if (!hasSelection) {
-                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
-                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
-                        this.sendMessageToWebview('response', markdownResponse);
-                        return;
-                    }
-                }
-                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
+                // Since we removed in-editor editing, send the response directly to the chat view
                 this.sendMessageToWebview('response', response.text);
             }
             else {
@@ -755,6 +655,11 @@ ${this.pendingEdit.replacementCode}
      */
     openCommandPalette() {
         this.sendMessageToWebview('openPalette', '');
+    }
+    handleOpenSettings(settingKey) {
+        if (settingKey) {
+            vscode.commands.executeCommand('workbench.action.openSettings', settingKey);
+        }
     }
     insertCode(code) {
         const editor = vscode.window.activeTextEditor;
@@ -802,17 +707,24 @@ ${this.pendingEdit.replacementCode}
                 <div id="bottom-controls">
                     
                     <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
+                        <input type="text" id="profile-name-input" placeholder="Profile Name (e.g., 'work', 'personal')">
+                        <input type="password" id="api-key-input" placeholder="API Key">
                         <button id="save-key-button">Save & Activate</button>
                     </div>
 
                     <div id="context-header">
                         <div id="context-file-controls">
                             
-                            <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
+                            <div id="profile-display">
+                                <label for="profile-selector" id="profile-label">Profile:</label>
+                                <select id="profile-selector" title="Select Active Gemini API Profile"></select>
+                                <button id="edit-profiles-button" title="Add/Edit API Keys">Edit Keys</button>
+                            </div>
+                            
+                            <button id="add-context-file-button" title="Add file context (File Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
-                                    <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
                                 </svg>
                             </button>
                             
@@ -822,6 +734,13 @@ ${this.pendingEdit.replacementCode}
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+
+                            <button id="menu-button" title="More Options (Three Dot Menu)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+                                </svg>
+                            </button>
+
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -862,6 +781,15 @@ ${this.pendingEdit.replacementCode}
                     </ul>
                 </div>
 
+                <!-- NEW: Three Dot Menu Structure -->
+                <div id="options-menu" class="hidden">
+                    <ul id="menu-options-list">
+                        <li id="menu-edit-keys">Add/Edit API Keys</li>
+                        <li id="menu-open-profiles-settings">Open gemini.profiles in Settings</li>
+                        <li id="menu-latency-settings">Adjust Latency/Debounce Settings</li>
+                    </ul>
+                </div>
+
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
@@ -877,8 +805,6 @@ function activate(context) {
     context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.openCommandPalette', () => {
         provider.openCommandPalette();
     }));
-    // R5: Register Edit Commands
-    context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()), vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit()));
     const inlineProvider = new InlineCompletionProvider_1.GeminiInlineCompletionProvider();
     const selector = { language: '*', scheme: 'file' };
     context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider(selector, inlineProvider));
@@ -891,7 +817,7 @@ function deactivate() { }
 
 --- START FILE: out\extension.js.map ---
 
-{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAobA,4BAyBC;AAED,gCAAgC;AA/chC,+CAAiC;AACjC,yCAA4C;AAC5C,iEAA8D;AAC9D,yEAA4E;AAE5E,wBAAwB;AACxB,MAAM,iBAAiB,GAAG,kCAAkC,CAAC;AAE7D;;GAEG;AACH,SAAS,QAAQ;IACb,IAAI,IAAI,GAAG,EAAE,CAAC;IACd,MAAM,QAAQ,GAAG,gEAAgE,CAAC;IAClF,KAAK,IAAI,CAAC,GAAG,CAAC,EAAE,CAAC,GAAG,EAAE,EAAE,CAAC,EAAE,EAAE,CAAC;QAC1B,IAAI,IAAI,QAAQ,CAAC,MAAM,CAAC,IAAI,CAAC,KAAK,CAAC,IAAI,CAAC,MAAM,EAAE,GAAG,QAAQ,CAAC,MAAM,CAAC,CAAC,CAAC;IACzE,CAAC;IACD,OAAO,IAAI,CAAC;AAChB,CAAC;AAGD;;GAEG;AACH,MAAM,mBAAmB;IASrB,YAA6B,aAAyB;QAAzB,kBAAa,GAAb,aAAa,CAAY;QAL9C,aAAQ,GAAuB,IAAI,CAAC;QAE3B,cAAS,GAAG,iBAAiB,CAAC,CAAC,gDAAgD;QACxF,iBAAY,GAAwB,IAAI,GAAG,EAAE,CAAC;QAGlD,IAAI,CAAC,kBAAkB,EAAE,CAAC;QAC1B,MAAM,CAAC,SAAS,CAAC,wBAAwB,CAAC,GAAG,EAAE,CAAC,IAAI,CAAC,kBAAkB,EAAE,CAAC,CAAC;IAC/E,CAAC;IAEO,kBAAkB;QACtB,MAAM,MAAM,GAAG,2CAAoB,CAAC,eAAe,EAAE,CAAC;QAEtD,IAAI,MAAM,EAAE,CAAC;YACT,IAAI,CAAC,QAAQ,GAAG,IAAI,mBAAW,CAAC,EAAE,MAAM,EAAE,CAAC,CAAC;QAChD,CAAC;aAAM,CAAC;YACJ,IAAI,CAAC,QAAQ,GAAG,IAAI,CAAC;QACzB,CAAC;QACD,IAAI,CAAC,cAAc,EAAE,CAAC;IAC1B,CAAC;IAEO,cAAc;QAClB,IAAI,IAAI,CAAC,KAAK,EAAE,CAAC;YACb,MAAM,EAAE,UAAU,EAAE,QAAQ,EAAE,GAAG,2CAAoB,CAAC,WAAW,EAAE,CAAC;YACpE,IAAI,CAAC,KAAK,CAAC,OAAO,CAAC,WAAW,CAAC;gBAC3B,OAAO,EAAE,cAAc;gBACvB,SAAS,EAAE,IAAI,CAAC,QAAQ,KAAK,IAAI;gBACjC,aAAa,EAAE,UAAU;gBACzB,iBAAiB,EAAE,MAAM,CAAC,IAAI,CAAC,QAAQ,CAAC;gBACxC,YAAY,EAAE,KAAK,CAAC,IAAI,CAAC,IAAI,CAAC,YAAY,CAAC,IAAI,EAAE,CAAC;aACrD,CAAC,CAAC;QACP,CAAC;IACL,CAAC;IAEM,kBAAkB,CACrB,WAA+B,EAC/B,OAAyC,EACzC,MAAgC;QAEhC,IAAI,CAAC,KAAK,GAAG,WAAW,CAAC;QACzB,WAAW,CAAC,OAAO,CAAC,OAAO,GAAG;YAC1B,aAAa,EAAE,IAAI;YACnB,kBAAkB,EAAE,CAAC,IAAI,CAAC,aAAa,CAAC;SAC3C,CAAC;QAEF,WAAW,CAAC,OAAO,CAAC,IAAI,GAAG,IAAI,CAAC,kBAAkB,CAAC,WAAW,CAAC,OAAO,CAAC,CAAC;QACxE,IAAI,CAAC,cAAc,EAAE,CAAC;QAEtB,WAAW,CAAC,OAAO,CAAC,mBAAmB,CAAC,KAAK,EAAE,OAAO,EAAE,EAAE;YACtD,QAAQ,OAAO,CAAC,OAAO,EAAE,CAAC;gBACtB,KAAK,cAAc;oBACf,IAAI,CAAC,sBAAsB,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC;oBAC1C,OAAO;gBACX,KAAK,YAAY;oBACb,IAAI,CAAC,UAAU,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC;oBAC9B,OAAO;gBACX,KAAK,kBAAkB;oBACnB,IAAI,CAAC,gBAAgB,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC;oBACpC,OAAO;gBACX,KAAK,SAAS;oBACV,IAAI,CAAC,oBAAoB,EAAE,CAAC;oBAC5B,OAAO;gBACX,KAAK,SAAS;oBACV,IAAI,CAAC,aAAa,CAAC,OAAO,CAAC,GAAG,CAAC,CAAC;oBAChC,OAAO;gBACX,KAAK,cAAc;oBACf,IAAI,CAAC,kBAAkB,CAAC,OAAO,CAAC,UAAU,CAAC,CAAC;oBAC5C,OAAO;gBACX,KAAK,gBAAgB;oBACjB,IAAI,CAAC,oBAAoB,EAAE,CAAC;oBAC5B,OAAO;gBACX,KAAK,mBAAmB;oBACpB,IAAI,CAAC,uBAAuB,CAAC,OAAO,CAAC,GAAG,CAAC,CAAC;oBAC1C,OAAO;YACf,CAAC;QACL,CAAC,CAAC,CAAC;IACP,CAAC;IAEO,oBAAoB;QACxB,IAAI,CAAC,YAAY,CAAC,KAAK,EAAE,CAAC;QAC1B,IAAI,CAAC,cAAc,EAAE,CAAC;QACtB,IAAI,CAAC,oBAAoB,CAAC,gBAAgB,EAAE,gBAAgB,CAAC,CAAC;IAClE,CAAC;IAEO,KAAK,CAAC,aAAa,CAAC,GAAW,EAAE,cAAsB,SAAS;QACpE,MAAM,UAAU,GAAG,GAAG,CAAC,IAAI,EAAE,CAAC;QAC9B,IAAI,UAAU,EAAE,CAAC;YACb,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,QAAQ,CAAC,CAAC;YAC3D,MAAM,QAAQ,GAAG,MAAM,CAAC,GAAG,CAA0B,UAAU,CAAC,IAAI,EAAE,CAAC;YAEvE,wDAAwD;YACxD,IAAI,CAAC,WAAW,IAAI,WAAW,CAAC,IAAI,EAAE,KAAK,EAAE,EAAE,CAAC;gBAC3C,WAAW,GAAG,SAAS,CAAC;YAC7B,CAAC;YAED,QAAQ,CAAC,WAAW,CAAC,GAAG,UAAU,CAAC;YAEnC,MAAM,MAAM,CAAC,MAAM,CAAC,UAAU,EAAE,QAAQ,EAAE,MAAM,CAAC,mBAAmB,CAAC,MAAM,CAAC,CAAC;YAC7E,MAAM,MAAM,CAAC,MAAM,CAAC,eAAe,EAAE,WAAW,EAAE,MAAM,CAAC,mBAAmB,CAAC,MAAM,CAAC,CAAC;YAErF,8CAA8C;YAC9C,IAAI,CAAC,kBAAkB,EAAE,CAAC;QAC9B,CAAC;IACL,CAAC;IAEO,KAAK,CAAC,mBAAmB,CAAC,WAAmB;QACjD,IAAI,WAAW,EAAE,CAAC;YACd,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,QAAQ,CAAC,CAAC;YAC3D,MAAM,MAAM,CAAC,MAAM,CAAC,eAAe,EAAE,WAAW,EAAE,MAAM,CAAC,mBAAmB,CAAC,MAAM,CAAC,CAAC;YAErF,2DAA2D;YAC3D,IAAI,CAAC,kBAAkB,EAAE,CAAC;QAC9B,CAAC;IACL,CAAC;IAEO,KAAK,CAAC,oBAAoB;QAC9B,MAAM,OAAO,GAA6B;YACtC,aAAa,EAAE,KAAK;YACpB,SAAS,EAAE,yBAAyB;YACpC,OAAO,EAAE;gBACL,YAAY,EAAE,CAAC,IAAI,EAAE,IAAI,EAAE,IAAI,EAAE,MAAM,EAAE,MAAM,EAAE,KAAK,EAAE,IAAI,CAAC;gBAC7D,WAAW,EAAE,CAAC,GAAG,CAAC;aACrB;SACJ,CAAC;QAEF,MAAM,OAAO,GAAG,MAAM,MAAM,CAAC,MAAM,CAAC,cAAc,CAAC,OAAO,CAAC,CAAC;QAE5D,IAAI,OAAO,IAAI,OAAO,CAAC,MAAM,GAAG,CAAC,EAAE,CAAC;YAChC,MAAM,GAAG,GAAG,OAAO,CAAC,CAAC,CAAC,CAAC;YACvB,IAAI,CAAC;gBACD,MAAM,YAAY,GAAG,MAAM,MAAM,CAAC,SAAS,CAAC,EAAE,CAAC,QAAQ,CAAC,GAAG,CAAC,CAAC;gBAC7D,MAAM,OAAO,GAAG,MAAM,CAAC,IAAI,CAAC,YAAY,CAAC,CAAC,QAAQ,CAAC,MAAM,CAAC,CAAC;gBAE3D,sBAAsB;gBACtB,IAAI,OAAO,CAAC,MAAM,GAAG,MAAM,EAAE,CAAC;oBAC1B,IAAI,CAAC,oBAAoB,CAAC,OAAO,EAAE,mBAAmB,OAAO,CAAC,MAAM,uEAAuE,CAAC,CAAC;oBAC7I,OAAO;gBACX,CAAC;gBAED,IAAI,CAAC,YAAY,CAAC,GAAG,CAAC,GAAG,CAAC,MAAM,EAAE,OAAO,CAAC,CAAC;gBAC3C,IAAI,CAAC,cAAc,EAAE,CAAC;YAE1B,CAAC;YAAC,OAAO,CAAC,EAAE,CAAC;gBACT,OAAO,CAAC,KAAK,CAAC,8BAA8B,EAAE,CAAC,CAAC,CAAC;gBACjD,IAAI,CAAC,oBAAoB,CAAC,OAAO,EAAE,wBAAwB,GAAG,CAAC,MAAM,EAAE,CAAC,CAAC;YAC7E,CAAC;QACL,CAAC;IACL,CAAC;IAEO,uBAAuB,CAAC,OAAe;QAC3C,IAAI,CAAC,YAAY,CAAC,MAAM,CAAC,OAAO,CAAC,CAAC;QAClC,IAAI,CAAC,cAAc,EAAE,CAAC;IAC1B,CAAC;IAEO,KAAK,CAAC,sBAAsB,CAAC,UAAkB;QACnD,IAAI,CAAC,IAAI,CAAC,KAAK,IAAI,CAAC,IAAI,CAAC,QAAQ,EAAE,CAAC;YAAC,OAAO;QAAC,CAAC;QAE9C,MAAM,MAAM,GAAG,MAAM,CAAC,MAAM,CAAC,gBAAgB,CAAC;QAC9C,IAAI,CAAC,MAAM,EAAE,CAAC;YACV,IAAI,CAAC,oBAAoB,CAAC,OAAO,EAAE,8BAA8B,CAAC,CAAC;YACnE,OAAO;QACX,CAAC;QAED,MAAM,QAAQ,GAAG,MAAM,CAAC,QAAQ,CAAC;QACjC,MAAM,YAAY,GAAG,QAAQ,CAAC,OAAO,CAAC,MAAM,CAAC,SAAS,CAAC,CAAC;QACxD,MAAM,UAAU,GAAG,QAAQ,CAAC,UAAU,CAAC;QACvC,MAAM,mBAAmB,GAAG,QAAQ,CAAC,OAAO,EAAE,CAAC,CAAC,sCAAsC;QAEtF,IAAI,CAAC,oBAAoB,CAAC,SAAS,EAAE,aAAa,CAAC,CAAC;QAEpD,IAAI,CAAC;YACD,IAAI,YAAY,GAAG,EAAE,CAAC;YAEtB,+DAA+D;YAC/D,YAAY,IAAI,8BAA8B,QAAQ,CAAC,QAAQ,SAAS,mBAAmB,qCAAqC,CAAC;YAEjI,oDAAoD;YACpD,IAAI,IAAI,CAAC,YAAY,CAAC,IAAI,GAAG,CAAC,EAAE,CAAC;gBAC7B,KAAK,MAAM,CAAC,IAAI,EAAE,OAAO,CAAC,IAAI,IAAI,CAAC,YAAY,CAAC,OAAO,EAAE,EAAE,CAAC;oBACxD,qEAAqE;oBACrE,IAAI,IAAI,KAAK,QAAQ,CAAC,GAAG,CAAC,MAAM;wBAAE,SAAS;oBAE3C,YAAY,IAAI,gCAAgC,IAAI,SAAS,OAAO,kCAAkC,CAAC;gBAC3G,CAAC;YACL,CAAC;YAED,qFAAqF;YACrF,MAAM,iBAAiB,GAAG;6EACuC,UAAU;;kBAErE,YAAY;;;;;;;;;wBASN,UAAU;;;;;;wBAMV,UAAU;;;;kIAIgG,UAAU;aAC/H,CAAC;YAEF,MAAM,WAAW,GAAG;;kBAEd,YAAY,CAAC,CAAC,CAAC,YAAY,CAAC,CAAC,CAAC,mBAAmB;;;kCAGjC,UAAU;aAC/B,CAAC;YAEF,MAAM,QAAQ,GAAG,MAAM,IAAI,CAAC,QAAQ,CAAC,MAAM,CAAC,eAAe,CAAC;gBACxD,KAAK,EAAE,IAAI,CAAC,SAAS;gBACrB,QAAQ,EAAE,WAAW;gBACrB,MAAM,EAAE;oBACJ,iBAAiB,EAAE,iBAAiB;iBACvC;aACJ,CAAC,CAAC;YAEH,IAAI,QAAQ,IAAI,QAAQ,CAAC,IAAI,EAAE,CAAC;gBAC5B,kFAAkF;gBAClF,IAAI,CAAC,oBAAoB,CAAC,UAAU,EAAE,QAAQ,CAAC,IAAI,CAAC,CAAC;YACzD,CAAC;iBAAM,CAAC;gBACJ,IAAI,CAAC,oBAAoB,CAAC,OAAO,EAAE,8DAA8D,CAAC,CAAC;YACvG,CAAC;QACL,CAAC;QAAC,OAAO,KAAK,EAAE,CAAC;YACb,iDAAiD;YACjD,IAAI,YAAoB,CAAC;YACzB,IAAI,KAAK,YAAY,KAAK,EAAE,CAAC;gBACzB,YAAY,GAAG,KAAK,CAAC,OAAO,IAAI,6BAA6B,CAAC;YAClE,CAAC;iBAAM,CAAC;gBACJ,YAAY,GAAG,MAAM,CAAC,KAAK,CAAC,CAAC;YACjC,CAAC;YAED,OAAO,CAAC,KAAK,CAAC,kBAAkB,EAAE,YAAY,CAAC,CAAC;YAChD,IAAI,CAAC,oBAAoB,CAAC,OAAO,EAAE,sEAAsE,YAAY,EAAE,CAAC,CAAC;QAC7H,CAAC;IACL,CAAC;IAEO,oBAAoB,CAAC,IAAyE,EAAE,OAAe;QACnH,IAAI,IAAI,CAAC,KAAK,EAAE,CAAC;YACb,IAAI,CAAC,KAAK,CAAC,OAAO,CAAC,WAAW,CAAC,EAAE,OAAO,EAAE,IAAI,EAAE,OAAO,EAAE,OAAO,EAAE,CAAC,CAAC;QACxE,CAAC;IACL,CAAC;IAED;;OAEG;IACI,kBAAkB;QACrB,IAAI,CAAC,oBAAoB,CAAC,aAAa,EAAE,EAAE,CAAC,CAAC;IACjD,CAAC;IAEO,kBAAkB,CAAC,UAAkB;QACzC,IAAI,UAAU,EAAE,CAAC;YACb,MAAM,CAAC,QAAQ,CAAC,cAAc,CAAC,+BAA+B,EAAE,UAAU,CAAC,CAAC;QAChF,CAAC;IACL,CAAC;IAEO,UAAU,CAAC,IAAY;QAC3B,MAAM,MAAM,GAAG,MAAM,CAAC,MAAM,CAAC,gBAAgB,CAAC;QAC9C,IAAI,MAAM,EAAE,CAAC;YACT,MAAM,CAAC,IAAI,CAAC,WAAW,CAAC,EAAE;gBACtB,MAAM,QAAQ,GAAG,MAAM,CAAC,SAAS,CAAC,MAAM,CAAC;gBACzC,WAAW,CAAC,MAAM,CAAC,QAAQ,EAAE,IAAI,CAAC,CAAC;YACvC,CAAC,CAAC,CAAC;QACP,CAAC;IACL,CAAC;IAEO,gBAAgB,CAAC,IAAY;QACjC,MAAM,MAAM,GAAG,MAAM,CAAC,MAAM,CAAC,gBAAgB,CAAC;QAC9C,IAAI,MAAM,IAAI,CAAC,MAAM,CAAC,SAAS,CAAC,OAAO,EAAE,CAAC;YACtC,MAAM,CAAC,IAAI,CAAC,WAAW,CAAC,EAAE;gBACtB,4EAA4E;gBAC5E,WAAW,CAAC,OAAO,CAAC,MAAM,CAAC,SAAS,EAAE,IAAI,CAAC,CAAC;YAChD,CAAC,CAAC,CAAC;QACP,CAAC;aAAM,IAAI,MAAM,EAAE,CAAC;YACf,IAAI,CAAC,UAAU,CAAC,IAAI,CAAC,CAAC;QAC3B,CAAC;IACL,CAAC;IAGO,kBAAkB,CAAC,OAAuB;QAC9C,MAAM,SAAS,GAAG,OAAO,CAAC,YAAY,CAAC,MAAM,CAAC,GAAG,CAAC,QAAQ,CAAC,IAAI,CAAC,aAAa,EAAE,KAAK,EAAE,SAAS,EAAE,SAAS,CAAC,CAAC,CAAC;QAC7G,MAAM,QAAQ,GAAG,OAAO,CAAC,YAAY,CAAC,MAAM,CAAC,GAAG,CAAC,QAAQ,CAAC,IAAI,CAAC,aAAa,EAAE,KAAK,EAAE,SAAS,EAAE,YAAY,CAAC,CAAC,CAAC;QAE/G,MAAM,KAAK,GAAG,QAAQ,EAAE,CAAC;QAEzB,OAAO;;;;;;8BAMe,QAAQ;oGAC8D,OAAO,CAAC,SAAS,uCAAuC,KAAK;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;iCAiGhI,KAAK,UAAU,SAAS;;oBAErC,CAAC;IACjB,CAAC;;AAtZsB,4BAAQ,GAAG,iBAAiB,AAApB,CAAqB;AA0ZxD,+BAA+B;AAC/B,SAAgB,QAAQ,CAAC,OAAgC;IACrD,OAAO,CAAC,GAAG,CAAC,6CAA6C,CAAC,CAAC;IAE3D,MAAM,QAAQ,GAAG,IAAI,mBAAmB,CAAC,OAAO,CAAC,YAAY,CAAC,CAAC;IAC/D,OAAO,CAAC,aAAa,CAAC,IAAI,CACtB,MAAM,CAAC,MAAM,CAAC,2BAA2B,CAAC,mBAAmB,CAAC,QAAQ,EAAE,QAAQ,CAAC,CACpF,CAAC;IAEF,uCAAuC;IACvC,OAAO,CAAC,aAAa,CAAC,IAAI,CACtB,MAAM,CAAC,QAAQ,CAAC,eAAe,CAAC,uCAAuC,EAAE,GAAG,EAAE;QAC1E,QAAQ,CAAC,kBAAkB,EAAE,CAAC;IAClC,CAAC,CAAC,CACL,CAAC;IAIF,MAAM,cAAc,GAAG,IAAI,yDAA8B,EAAE,CAAC;IAC5D,MAAM,QAAQ,GAA4B,EAAE,QAAQ,EAAE,GAAG,EAAE,MAAM,EAAE,MAAM,EAAE,CAAC;IAE5E,OAAO,CAAC,aAAa,CAAC,IAAI,CACtB,MAAM,CAAC,SAAS,CAAC,oCAAoC,CAAC,QAAQ,EAAE,cAAc,CAAC,CAClF,CAAC;IAEF,OAAO,CAAC,GAAG,CAAC,+CAA+C,CAAC,CAAC;AACjE,CAAC;AAED,SAAgB,UAAU,KAAK,CAAC"}
 
 --- END FILE: out\extension.js.map ---
 
@@ -948,7 +874,7 @@ class GeminiInlineCompletionProvider {
         vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
     }
     initializeApiAgent() {
-        const apiKey = ConfigurationManager_1.ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager_1.ConfigurationManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new genai_1.GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");
@@ -1045,7 +971,7 @@ exports.GeminiInlineCompletionProvider = GeminiInlineCompletionProvider;
 
 --- START FILE: out\InlineCompletionProvider.js.map ---
 
-{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\InlineCompletionProvider.js.map ---
 
@@ -1054,22 +980,45 @@ exports.GeminiInlineCompletionProvider = GeminiInlineCompletionProvider;
 // src/ConfigurationManager.ts
 import * as vscode from 'vscode';
 
+type ApiProfiles = { [key: string]: string };
+
 export class ConfigurationManager {
     private static readonly CONFIG_SECTION = 'gemini';
 
     /**
-     * Retrieves the Gemini API Key securely from the VS Code configuration.
-     * @returns The API key string, or undefined if not set or empty.
+     * Retrieves the currently active Gemini API Key from the configured profiles.
+     * @returns The active API key string, or undefined if not set or invalid.
      */
-    public static getApiKey(): string | undefined {
+    public static getActiveApiKey(): string | undefined {
         const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
-        const apiKey = config.get<string>('apiKey');
+        const activeProfileName = config.get<string>('activeProfile');
+        const profiles = config.get<ApiProfiles>('profiles') || {};
         
+        if (!activeProfileName || activeProfileName.trim() === '') {
+            return undefined;
+        }
+        
+        const apiKey = profiles[activeProfileName];
+
         // Safety check: Return undefined if the key is undefined or an empty string after trimming.
         if (!apiKey || apiKey.trim() === '') {
             return undefined;
         }
         return apiKey.trim();
+    }
+
+    /**
+     * Retrieves all configured API key profiles.
+     */
+    public static getProfiles(): { activeName: string | undefined, profiles: ApiProfiles } {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        const activeProfileName = config.get<string>('activeProfile');
+        const profiles = config.get<ApiProfiles>('profiles') || {};
+
+        return {
+            activeName: activeProfileName,
+            profiles: profiles
+        };
     }
 
     /**
@@ -1084,6 +1033,7 @@ export class ConfigurationManager {
         return Math.max(100, Math.min(2000, delay));
     }
 }
+
 
 --- END FILE: src\ConfigurationManager.ts ---
 
@@ -1202,17 +1152,14 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
     private contextFiles: Map<string, string> = new Map(); 
     
-    // R5: State for tracking in-editor code suggestions
-    private pendingEdit: { description: string, edit: vscode.WorkspaceEdit, documentUri: vscode.Uri, range: vscode.Range, replacementCode: string } | null = null;
-    private statusDisposables: vscode.Disposable[] = [];
-
     constructor(private readonly _extensionUri: vscode.Uri) {
         this.initializeApiAgent();
         vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
     }
     
     private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager.getActiveApiKey();
+        
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
         } else {
@@ -1223,9 +1170,12 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
     private postViewStatus() {
         if (this._view) {
+            const { activeName, profiles } = ConfigurationManager.getProfiles();
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
                 keyStatus: this.apiAgent !== null,
+                activeProfile: activeName,
+                availableProfiles: Object.keys(profiles),
                 contextFiles: Array.from(this.contextFiles.keys())
             });
         }
@@ -1262,6 +1212,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'saveKey':
                     this.handleSaveKey(message.key);
                     return;
+                case 'openSettings':
+                    this.handleOpenSettings(message.settingKey);
+                    return;
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -1278,14 +1231,34 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
 
-    private async handleSaveKey(key: string) {
+    private async handleSaveKey(key: string, profileName: string = 'default') {
         const trimmedKey = key.trim();
         if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update(
-                'apiKey', 
-                trimmedKey, 
-                vscode.ConfigurationTarget.Global
-            );
+            const config = vscode.workspace.getConfiguration('gemini');
+            const profiles = config.get<{[key: string]: string}>('profiles') || {};
+            
+            // Allow specifying profileName, defaulting to 'default'
+            if (!profileName || profileName.trim() === '') {
+                 profileName = 'default';
+            }
+            
+            profiles[profileName] = trimmedKey;
+            
+            await config.update('profiles', profiles, vscode.ConfigurationTarget.Global);
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            
+            // Re-initialize agent to validate the new key
+            this.initializeApiAgent();
+        }
+    }
+
+    private async handleSwitchProfile(profileName: string) {
+        if (profileName) {
+            const config = vscode.workspace.getConfiguration('gemini');
+            await config.update('activeProfile', profileName, vscode.ConfigurationTarget.Global);
+            
+            // Re-initialize agent to load the key from the new profile
+            this.initializeApiAgent();
         }
     }
 
@@ -1328,122 +1301,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
     
-    /**
-     * R5: Utility to parse the LLM's contextual edit format and return the parts, 
-     * regardless of whether an editor selection exists.
-     */
-    private parseContextualEdit(response: string): { description: string, removedCode: string, replacementCode: string } | null {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-
-        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
-            return null;
-        }
-
-        // We clear any existing pending edit immediately upon new submission
-        this.clearPendingEdit();
-
-        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
-        const description = parts[0].trim();
-        const editContent = parts.length > 1 ? parts[1].trim() : '';
-
-        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
-
-        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
-        if (diffParts.length !== 2) {
-            console.warn("Malformed CONTEXTUAL_EDIT received.");
-            return null;
-        }
-        
-        const [removedCode, replacementCode] = diffParts;
-
-        return { description, removedCode, replacementCode };
-    }
-
-    /**
-     * R5: Manages the custom VS Code context key and status bar message.
-     */
-    private updatePendingEditContext(hasEdit: boolean) {
-        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
-
-        this.statusDisposables.forEach(d => d.dispose());
-        this.statusDisposables = [];
-
-        if (hasEdit && this.pendingEdit) {
-            const editor = vscode.window.activeTextEditor;
-            // Only show status bar message if the edit applies to the current active document
-            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
-                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
-                this.statusDisposables.push(
-                    // Show a persistent status bar message
-                    vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000) 
-                );
-            }
-        }
-    }
-
-    /**
-     * R5: Clears the pending edit state and status UI.
-     */
-    private clearPendingEdit() {
-        this.pendingEdit = null;
-        this.updatePendingEditContext(false);
-    }
-
-    /**
-     * R5: Accepts and applies the pending in-editor code suggestion.
-     */
-    public async acceptEdit() {
-        if (!this.pendingEdit) {
-            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
-            return;
-        }
-        
-        const currentUri = vscode.window.activeTextEditor?.document.uri;
-
-        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
-            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
-            this.clearPendingEdit(); // Clear old edit if context is lost
-            return;
-        }
-
-        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
-        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
-
-        if (success) {
-            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
-        } else {
-            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
-            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
-            
-            // Fallback to sending the code to the chat view
-            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
-            const fallbackContent = `
-Edit Failed to Apply: ${this.pendingEdit.description}
-
-You can manually insert the replacement code:
-\`\`\`${languageId}
-${this.pendingEdit.replacementCode}
-\`\`\`
-`;
-            this.sendMessageToWebview('response', fallbackContent);
-        }
-
-        this.clearPendingEdit();
-    }
-
-    /**
-     * R5: Rejects the pending in-editor code suggestion.
-     */
-    public rejectEdit() {
-        if (this.pendingEdit) {
-            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
-            this.clearPendingEdit();
-        } else {
-            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
-        }
-    }
-
     private async handlePromptSubmission(userPrompt: string) {
         if (!this._view || !this.apiAgent) { return; }
 
@@ -1476,24 +1333,30 @@ ${this.pendingEdit.replacementCode}
                 }
             }
 
-            // System instruction remains to enforce the custom chat format
+            // System instruction enforces the requested chat output format (Find/Replace blocks)
             const systemInstruction = `
-                You are an expert Senior Software Engineer specializing in ${languageId}.
-                Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
+                You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
+                Your goal is to assist the user with code modification, generation, debugging, and refactoring.
                 ${contextBlock}
                 
-                CRITICAL CONSTRAINT: If the user requests any code modification, update, or insertion, you MUST respond using ONE of the following formats. DO NOT use both.
+                CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
+                DO NOT use conversational filler, explanations, or commentary outside of these structures.
                 
-                1. A standard markdown code block (\`\`\`language\`).
-                2. The precise contextual edit format (for inline changes to the selected code):
+                1. For code modifications (deletion, replacement, or insertion within existing code):
                 
-                [Brief description of the change]
-                [[CONTEXTUAL_EDIT]]
-                [Lines of existing code to be REMOVED (keep original indentation)]
-                [[---]]
-                [Lines of new code to be ADDED (with correct indentation)]
-
-                DO NOT add extra commentary outside the chosen block structure.
+                --- FIND ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                --- REPLACE ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
             `;
 
             const userContent = `
@@ -1513,48 +1376,7 @@ ${this.pendingEdit.replacementCode}
             });
             
             if (response && response.text) {
-                
-                // R5: Check for in-editor contextual edit format
-                const parsedEdit = this.parseContextualEdit(response.text);
-
-                if (parsedEdit) {
-                    const hasSelection = !editor.selection.isEmpty;
-                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
-                    
-                    if (hasSelection) {
-                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
-                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
-                        const workspaceEdit = new vscode.WorkspaceEdit();
-                        workspaceEdit.replace(
-                            document.uri, 
-                            editor.selection, 
-                            parsedEdit.replacementCode
-                        );
-
-                        // Store the pending edit
-                        this.pendingEdit = {
-                            description: parsedEdit.description || 'Code change suggested',
-                            edit: workspaceEdit,
-                            documentUri: document.uri,
-                            range: editor.selection,
-                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
-                        };
-
-                        this.updatePendingEditContext(true);
-                        // Use the description stored in pendingEdit, which includes the fallback
-                        const editDescription = this.pendingEdit!.description;
-                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
-                        return; 
-                        
-                    } else if (!hasSelection) {
-                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
-                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
-                        this.sendMessageToWebview('response', markdownResponse);
-                        return;
-                    }
-                }
-                
-                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
+                // Since we removed in-editor editing, send the response directly to the chat view
                 this.sendMessageToWebview('response', response.text);
             } else {
                 this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
@@ -1584,6 +1406,12 @@ ${this.pendingEdit.replacementCode}
      */
     public openCommandPalette() {
         this.sendMessageToWebview('openPalette', '');
+    }
+    
+    private handleOpenSettings(settingKey: string) {
+        if (settingKey) {
+            vscode.commands.executeCommand('workbench.action.openSettings', settingKey);
+        }
     }
 
     private insertCode(code: string) {
@@ -1636,17 +1464,24 @@ ${this.pendingEdit.replacementCode}
                 <div id="bottom-controls">
                     
                     <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
+                        <input type="text" id="profile-name-input" placeholder="Profile Name (e.g., 'work', 'personal')">
+                        <input type="password" id="api-key-input" placeholder="API Key">
                         <button id="save-key-button">Save & Activate</button>
                     </div>
 
                     <div id="context-header">
                         <div id="context-file-controls">
                             
-                            <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
+                            <div id="profile-display">
+                                <label for="profile-selector" id="profile-label">Profile:</label>
+                                <select id="profile-selector" title="Select Active Gemini API Profile"></select>
+                                <button id="edit-profiles-button" title="Add/Edit API Keys">Edit Keys</button>
+                            </div>
+                            
+                            <button id="add-context-file-button" title="Add file context (File Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
-                                    <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
                                 </svg>
                             </button>
                             
@@ -1656,6 +1491,13 @@ ${this.pendingEdit.replacementCode}
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+
+                            <button id="menu-button" title="More Options (Three Dot Menu)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+                                </svg>
+                            </button>
+
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -1696,6 +1538,15 @@ ${this.pendingEdit.replacementCode}
                     </ul>
                 </div>
 
+                <!-- NEW: Three Dot Menu Structure -->
+                <div id="options-menu" class="hidden">
+                    <ul id="menu-options-list">
+                        <li id="menu-edit-keys">Add/Edit API Keys</li>
+                        <li id="menu-open-profiles-settings">Open gemini.profiles in Settings</li>
+                        <li id="menu-latency-settings">Adjust Latency/Debounce Settings</li>
+                    </ul>
+                </div>
+
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
@@ -1719,11 +1570,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
     
-    // R5: Register Edit Commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()),
-        vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit())
-    );
+
 
     const inlineProvider = new GeminiInlineCompletionProvider();
     const selector: vscode.DocumentSelector = { language: '*', scheme: 'file' };
@@ -1736,6 +1583,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() { }
+
 
 --- END FILE: src\extension.ts ---
 
@@ -1763,7 +1611,7 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
     }
 
     private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+        const apiKey = ConfigurationManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");
@@ -1880,6 +1728,7 @@ TASK: Based on the context and the '###CURSOR###' position, complete the code pr
     }
 }
 
+
 --- END FILE: src\InlineCompletionProvider.ts ---
 
 --- START FILE: src\webview\index.html ---
@@ -1920,14 +1769,18 @@ TASK: Based on the context and the '###CURSOR###' position, complete the code pr
 // src/webview/main.js
 // This script runs in the webview context.
 const vscode = acquireVsCodeApi();
+const CHAT_STORAGE_KEY = 'geminiCoderChatHistory';
+let chatMessages = []; // Stores { type: string, content: string, isText: boolean }
 
 document.addEventListener('DOMContentLoaded', () => {
     const chatHistory = document.getElementById('chat-history');
     const promptInput = document.getElementById('prompt-input');
     const sendButton = document.getElementById('send-button');
-    const newChatButton = document.getElementById('new-chat-button');
+    const newChatButton = document.getElementById('new-chat-button'); // Added back
+    const menuButton = document.getElementById('menu-button');
     const keyStatusIndicator = document.getElementById('key-status-indicator');
     const configPanel = document.getElementById('config-panel');
+    const profileNameInput = document.getElementById('profile-name-input'); // NEW
     const apiKeyInput = document.getElementById('api-key-input');
     const saveKeyButton = document.getElementById('save-key-button');
     
@@ -1937,37 +1790,246 @@ document.addEventListener('DOMContentLoaded', () => {
     const contextPlaceholder = document.getElementById('context-placeholder');
     const addContextFileButton = document.getElementById('add-context-file-button');
     
-    // R4: Command Palette Elements
-    const commandPalette = document.getElementById('command-palette');
+    // Profile Elements
+    const profileSelector = document.getElementById('profile-selector'); // NEW
+    const editProfilesButton = document.getElementById('edit-profiles-button'); // NEW
+
+    // NEW: Options Menu Elements
+    const optionsMenu = document.getElementById('options-menu');
+    const menuEditKeys = document.getElementById('menu-edit-keys');
+    const menuOpenProfilesSettings = document.getElementById('menu-open-profiles-settings');
+    const menuLatencySettings = document.getElementById('menu-latency-settings');
+
+    // R4: Command Palette Elements    const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
 
-    const initialWelcomeMessage = `
-        <div class="message system">
-            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
-        </div>`;
-
-    chatHistory.innerHTML = initialWelcomeMessage; 
+    const initialWelcomeMessageContent = "Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.";
 
     // Utility to post a message to the extension host (extension.ts)
     const postMessage = (command, payload = {}) => {
         vscode.postMessage({ command, ...payload });
     };
 
+    // --- Persistence and Rendering Helpers ---
+
+    // Utility to create the actual DOM element 
+    function createMessageElement(type, content, isText) {
+        const messageDiv = document.createElement('div');
+        if (type === 'success') {
+             messageDiv.classList.add('message', 'system', 'success');
+        } else {
+            messageDiv.classList.add('message', type);
+        }
+        if (isText) {
+            messageDiv.textContent = content;
+        } else {
+            messageDiv.innerHTML = content;
+        }
+        return messageDiv;
+    }
+
+    // Renders the full history from chatMessages array
+    function renderChatHistory() {
+        chatHistory.innerHTML = '';
+        
+        chatMessages.forEach(msg => {
+            if (msg.type !== 'loading') { // Don't render stale loading messages
+                const messageDiv = createMessageElement(msg.type, msg.content, msg.isText);
+                chatHistory.appendChild(messageDiv);
+            }
+        });
+        
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        attachCodeActionListeners(); // Re-attach listeners after rendering
+    }
+    
+    function saveChatHistory() {
+        try {
+            // Only save user, assistant, system, success messages. Skip transient ones.
+            const historyToSave = chatMessages.filter(m => 
+                m.type !== 'loading' && m.type !== 'error'
+            );
+            localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(historyToSave));
+        } catch (e) {
+            console.error("Failed to save chat history to local storage:", e);
+        }
+    }
+
+    function loadChatHistory() {
+        try {
+            const storedHistory = localStorage.getItem(CHAT_STORAGE_KEY);
+            if (storedHistory) {
+                const loadedMessages = JSON.parse(storedHistory);
+                if (Array.isArray(loadedMessages) && loadedMessages.length > 0) {
+                    chatMessages = loadedMessages;
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to load chat history from local storage. Starting fresh.", e);
+        }
+        
+        // If chatMessages is empty after loading, inject the welcome message
+        if (chatMessages.length === 0) {
+            chatMessages.push({ type: 'system', content: initialWelcomeMessageContent, isText: true });
+        }
+        renderChatHistory();
+    }
+    
+    /**
+     * Updates the profile dropdown selector (used primarily for internal tracking and config panel).
+     * @param {string[]} availableProfiles Array of profile names.
+     * @param {string} activeProfile The currently active profile name.
+     */
+    function updateProfileSelector(availableProfiles, activeProfile) {
+        // profileSelector is now hidden, but required by config-panel logic
+        profileSelector.innerHTML = ''; 
+        
+        const names = Array.isArray(availableProfiles) ? availableProfiles : [];
+
+        if (names.length === 0 || !names.includes(activeProfile)) {
+            names.push(activeProfile);
+        }
+        
+        const uniqueNames = [...new Set(names)].sort();
+
+        uniqueNames.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (name === activeProfile) {
+                option.selected = true;
+            }
+            profileSelector.appendChild(option);
+        });
+    }
+
+    // Initialize history on load
+    loadChatHistory();
+
     // --- F1: New Chat Session ---
     newChatButton.addEventListener('click', () => {
-        postMessage('newChat');
+        // Clear internal state and storage
+        chatMessages = [{ type: 'system', content: initialWelcomeMessageContent, isText: true }];
+        localStorage.removeItem(CHAT_STORAGE_KEY);
+        renderChatHistory(); 
+        
+        postMessage('newChat'); // Send message to extension to reset file context
+    });
+    
+    // --- F3: Options Menu Logic ---
+    menuButton.addEventListener('click', (e) => {
+        optionsMenu.classList.toggle('hidden');
+        if (!optionsMenu.classList.contains('hidden')) {
+            // Position the menu slightly below and aligned to the right edge of the button
+            const rect = menuButton.getBoundingClientRect();
+            
+            // Top: Align top of menu with bottom of button, plus a small offset (5px padding)
+            optionsMenu.style.top = `${rect.bottom + 5}px`; 
+            
+            // Right: Align right edge of menu with right edge of button/viewport edge
+            optionsMenu.style.right = `${window.innerWidth - rect.right}px`;
+            
+            optionsMenu.style.left = 'auto'; // Clear left positioning
+        }
+        e.stopPropagation(); 
     });
 
-    // --- F2: Inline API Key Configuration ---
-    saveKeyButton.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key) {
-            saveKeyButton.textContent = 'Saving...';
-            apiKeyInput.disabled = true;
-            saveKeyButton.disabled = true;
-            postMessage('saveKey', { key: key });
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!optionsMenu.contains(e.target) && e.target !== menuButton) {
+            optionsMenu.classList.add('hidden');
         }
     });
+    
+    // Open Edit Keys panel directly from menu
+    menuEditKeys.addEventListener('click', () => {
+        optionsMenu.classList.add('hidden');
+        configPanel.classList.remove('hidden'); // Show config panel
+        
+        // Re-use logic from editProfilesButton handler for input setup
+        apiKeyInput.value = '';
+        profileNameInput.value = '';
+        const selectedProfile = profileSelector.value;
+        if (selectedProfile && selectedProfile !== 'None') {
+            profileNameInput.setAttribute('placeholder', `Editing existing profile: ${selectedProfile}`);
+            profileNameInput.value = selectedProfile; 
+        } else {
+             profileNameInput.setAttribute('placeholder', `New Profile Name (required)`);
+        }
+        apiKeyInput.setAttribute('placeholder', `API Key (required)`);
+        profileNameInput.focus();
+    });
+
+    // Open Settings for gemini.profiles
+    menuOpenProfilesSettings.addEventListener('click', () => {
+        postMessage('openSettings', { settingKey: 'gemini.profiles' });
+        optionsMenu.classList.add('hidden');
+    });
+    
+    // Open Settings for latency debounce
+    menuLatencySettings.addEventListener('click', () => {
+        postMessage('openSettings', { settingKey: 'gemini.latency.debounceMs' });
+        optionsMenu.classList.add('hidden');
+    });
+
+
+    // --- F2/F5: Profile Management and Saving ---
+
+    // 1. Handle saving a new profile/key
+    saveKeyButton.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        let profileName = profileNameInput.value.trim();
+
+        if (key && profileName) {
+            saveKeyButton.textContent = 'Saving...';
+            apiKeyInput.disabled = true;
+            profileNameInput.disabled = true;
+            saveKeyButton.disabled = true;
+            postMessage('saveKey', { key: key, profileName: profileName });
+        } else if (key) {
+             // Fallback to default if name is missing but key is present
+            profileName = 'default';
+            saveKeyButton.textContent = 'Saving...';
+            apiKeyInput.disabled = true;
+            profileNameInput.disabled = true;
+            saveKeyButton.disabled = true;
+            postMessage('saveKey', { key: key, profileName: profileName });
+        }
+    });
+    
+    // 2. Handle profile selection switch
+    profileSelector.addEventListener('change', () => {
+        const profileName = profileSelector.value;
+        if (profileName && profileName !== 'None') {
+            postMessage('switchProfile', { profileName });
+            // Hide config panel after switching profiles
+            configPanel.classList.add('hidden');
+        }
+    });
+
+    // 3. Handle Edit Keys button: Toggle the simple config panel
+    editProfilesButton.addEventListener('click', () => {
+        optionsMenu.classList.add('hidden'); // Hide options menu if open
+        
+        configPanel.classList.toggle('hidden');
+        if (!configPanel.classList.contains('hidden')) {
+            // Clear inputs, then pre-fill name if an active profile is selected
+            apiKeyInput.value = '';
+            profileNameInput.value = '';
+            
+            const selectedProfile = profileSelector.value;
+            
+            if (selectedProfile && selectedProfile !== 'None') {
+                profileNameInput.setAttribute('placeholder', `Editing existing profile: ${selectedProfile}`);
+                profileNameInput.value = selectedProfile; 
+            } else {
+                 profileNameInput.setAttribute('placeholder', `New Profile Name (required)`);
+            }
+            apiKeyInput.setAttribute('placeholder', `API Key (required)`);
+            profileNameInput.focus();
+        }
+    });
+
 
     // --- F3: Contextual File Inclusion ---
     addContextFileButton.addEventListener('click', () => {
@@ -2042,48 +2104,105 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // R2 & R3: Enhanced formatting for Code Responses (Simplified)
+    // R2 & R3: Enhanced formatting for Code Responses (Handling FIND/REPLACE blocks)
     function formatResponse(responseText) {
+        // Regex for FIND/REPLACE blocks. Assumes structure: --- FIND --- ```lang...``` --- REPLACE --- ```lang...```
+        const findReplaceRegex = /---\s*FIND\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```\s*---\s*REPLACE\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```/gi;
         
-        // Treat contextual edit markers as plain text if they reach the webview, 
-        // as successful in-editor edits are intercepted in the extension host.
-        const plainText = responseText;
-
-        // Existing logic for standard markdown code blocks
-        const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
-        let match;
-        let lastIndex = 0;
+        // Regex for standard standalone markdown blocks
+        const standardCodeRegex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
+        
         let formattedHtml = '';
+        let lastIndex = 0;
         let codeFound = false;
-
-        while ((match = regex.exec(plainText)) !== null) {
-            codeFound = true;
-            const textBefore = plainText.substring(lastIndex, match.index).trim();
-            const codeContent = match[1];
-
-            if (textBefore) {
-                formattedHtml += `<p>${textBefore}</p>`;
+        
+        const responseSegments = [];
+        
+        // 1. Extract and process FIND/REPLACE blocks first
+        let match;
+        while ((match = findReplaceRegex.exec(responseText)) !== null) {
+            // Push text content before this block
+            if (match.index > lastIndex) {
+                responseSegments.push({ type: 'text', content: responseText.substring(lastIndex, match.index) });
             }
-
-            formattedHtml += `
-                <div class="code-block">
-                    <pre>${escapeHtml(codeContent)}</pre>
-                    <div class="code-actions">
-                        <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
-                        <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
-                    </div>
-                </div>
-            `;
+            
+            const findContent = match[1].trim();
+            const replaceContent = match[2].trim();
+            
+            responseSegments.push({ type: 'findReplace', find: findContent, replace: replaceContent });
             lastIndex = match.index + match[0].length;
         }
-
-        const textAfter = plainText.substring(lastIndex).trim();
-        if (textAfter) {
-            formattedHtml += `<p>${textAfter}</p>`;
+        
+        // Push remaining text content
+        if (lastIndex < responseText.length) {
+            responseSegments.push({ type: 'text', content: responseText.substring(lastIndex) });
         }
         
-        if (!codeFound && plainText.trim()) {
-            formattedHtml = `<p>${plainText.trim()}</p>`;
+        // 2. Process segments and render
+        for (const segment of responseSegments) {
+            if (segment.type === 'findReplace') {
+                codeFound = true;
+                formattedHtml += `
+                    <div class="code-diff-block">
+                        <div class="diff-header code-header">
+                            <span>--- FIND ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.find)}" title="Copy FIND block">Copy</button>
+                        </div>
+                        <div class="find-block">
+                            <pre>${escapeHtml(segment.find)}</pre>
+                        </div>
+                        <div class="diff-header code-header">
+                            <span>--- REPLACE ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.replace)}" title="Copy REPLACE block">Copy</button>
+                        </div>
+                        <div class="replace-block">
+                            <pre>${escapeHtml(segment.replace)}</pre>
+                            <div class="code-actions">
+                                <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (segment.type === 'text') {
+                let text = segment.content;
+                let standardMatch;
+                let textLastIndex = 0;
+                
+                // 3. Look for standard code blocks within the remaining text segments
+                while ((standardMatch = standardCodeRegex.exec(text)) !== null) {
+                    codeFound = true;
+                    const textBefore = text.substring(textLastIndex, standardMatch.index).trim();
+                    const codeContent = standardMatch[1];
+                    
+                    if (textBefore) {
+                         formattedHtml += `<p>${textBefore}</p>`;
+                    }
+                    
+                    formattedHtml += `
+                        <div class="code-block">
+                            <div class="code-header standard-header">
+                                <button class="copy-button" data-code="${escapeHtml(codeContent)}" title="Copy code block">Copy</button>
+                            </div>
+                            <pre>${escapeHtml(codeContent)}</pre>
+                            <div class="code-actions">
+                                <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
+                                <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
+                            </div>
+                        </div>
+                    `;
+                    textLastIndex = standardMatch.index + standardMatch[0].length;
+                }
+                
+                const textAfter = text.substring(textLastIndex).trim();
+                if (textAfter) {
+                    formattedHtml += `<p>${textAfter}</p>`;
+                }
+            }
+        }
+        
+        if (!codeFound && responseText.trim()) {
+            // Handle plain text response if no blocks were found
+            formattedHtml = `<p>${responseText.trim()}</p>`;
         }
         
         return formattedHtml;
@@ -2114,8 +2233,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function attachCopyListeners() {
+        document.querySelectorAll('.copy-button').forEach(button => {
+            button.onclick = (e) => {
+                const code = e.currentTarget.getAttribute('data-code');
+                if (code) {
+                    navigator.clipboard.writeText(code).then(() => {
+                        const originalText = button.innerHTML;
+                        button.innerHTML = 'Copied!';
+                        // Reset text after 2 seconds
+                        setTimeout(() => {
+                            button.innerHTML = originalText;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        button.innerHTML = 'Error';
+                    });
+                }
+            };
+        });
+    }
+
     // R3: Attach listeners for code action buttons (standard blocks)
     function attachCodeActionListeners() {
+        attachCopyListeners(); // Attach copy listeners whenever code actions are attached
+
         document.querySelectorAll('.action-insert').forEach(button => {
             button.onclick = (e) => {
                 const code = e.currentTarget.getAttribute('data-code');
@@ -2131,18 +2273,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Note: Contextual edit action listeners removed as in-editor edits are now handled natively via commands.
+
 
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
         const message = event.data;
         const content = message.content;
 
-        const loadingMessage = chatHistory.querySelector('.message.loading');
-        if (loadingMessage) {
-            loadingMessage.remove();
-        }
-        
         // Re-enable inputs only AFTER a response or error is handled
         if (message.command === 'response' || message.command === 'error') {
             promptInput.disabled = false;
@@ -2152,27 +2289,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch (message.command) {
             case 'updateStatus': 
+                // Check if we just transitioned from inactive (hidden config) to active
+                const wasActive = keyStatusIndicator.classList.contains('active');
+                
                 saveKeyButton.textContent = 'Save & Activate';
                 apiKeyInput.disabled = false;
+                profileNameInput.disabled = false; // Re-enable profile input
                 saveKeyButton.disabled = false;
 
+                // Update Profile Display & Selector
+                const activeProfile = message.activeProfile || 'None';
+                updateProfileSelector(message.availableProfiles, activeProfile);
+                
                 if (message.keyStatus) {
                     keyStatusIndicator.classList.add('active');
-                    keyStatusIndicator.title = 'API Key Status: Active';
+                    keyStatusIndicator.title = `API Key Status: Active (Profile: ${activeProfile})`;
                     configPanel.classList.add('hidden');
                     contextHeader.classList.remove('hidden'); 
+                    
+                    if (!wasActive && chatMessages.length === 1 && chatMessages[0].type === 'system') {
+                        // Display clear confirmation if key was just activated and chat was essentially empty (only welcome message)
+                        appendMessage('success', `Gemini API Key successfully validated and activated using profile: ${activeProfile}.`, true, false);
+                    }
+
                 } else {
                     keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid';
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Please enter your key below, or configure profiles in settings.';
                     configPanel.classList.remove('hidden');
                     contextHeader.classList.add('hidden'); 
-                    chatHistory.innerHTML = ''; // Clear chat history when key is missing
+                    
+                    // Clear state and storage when API key is missing/invalid
+                    // Ensure that we re-initialize the welcome message if the key is removed, 
+                    // otherwise the chat history will be completely blank until activation.
+                    chatMessages = [{ type: 'system', content: initialWelcomeMessageContent, isText: true }];
+                    localStorage.removeItem(CHAT_STORAGE_KEY);
+                    renderChatHistory(); // Render the welcome message
                 }
                 updateContextFileList(message.contextFiles || []);
                 break;
             
             case 'newChatConfirm':
-                chatHistory.innerHTML = initialWelcomeMessage;
+                // History was cleared by newChatButton handler. We only need to re-render.
+                renderChatHistory();
                 break;
             
             case 'openPalette':
@@ -2180,15 +2338,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'loading':
-                appendMessage('loading', content);
+                // Pass false for save, as loading is transient
+                appendMessage('loading', content, true, false); 
                 break;
             case 'response':
                 const formattedHtml = formatResponse(content);
-                appendMessage('assistant', formattedHtml, false); 
+                appendMessage('assistant', formattedHtml, false, true); 
                 attachCodeActionListeners();
                 break;
             case 'error':
-                appendMessage('error', content);
+                // Pass false for save, as errors should not persist in history
+                appendMessage('error', content, true, false); 
                 break;
         }
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -2221,7 +2381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prompt = promptInput.value.trim();
         if (!prompt) return;
 
-        appendMessage('user', prompt);
+        appendMessage('user', prompt, true, true); // Save user message
         
         // Reset height and disable input while request is pending
         promptInput.value = '';
@@ -2236,18 +2396,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 
-    // DOM Manipulation Helpers
-    function appendMessage(type, content, isText = true) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message', type);
+    // DOM Manipulation Helpers (Refactored for Persistence)
+    /**
+     * Appends a message to the DOM and updates the internal state array.
+     * @param type Message type (user, assistant, system, loading, error, success)
+     * @param content Message content (text or HTML)
+     * @param isText True if content is plain text, false if HTML
+     * @param save True if the message should be persisted to localStorage (default: true)
+     */
+    function appendMessage(type, content, isText = true, save = true) {
         
-        if (isText) {
-            messageDiv.textContent = content;
-        } else {
-            messageDiv.innerHTML = content;
+        // 1. Check if a loading message exists in state/DOM and remove it
+        const loadingIndex = chatMessages.findIndex(m => m.type === 'loading');
+        
+        if (loadingIndex !== -1) {
+            chatMessages.splice(loadingIndex, 1);
+            const loadingMessage = chatHistory.querySelector('.message.loading');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
         }
         
+        // 2. Add the new message to the internal state array
+        chatMessages.push({ type, content, isText });
+        
+        // 3. Update DOM 
+        const messageDiv = createMessageElement(type, content, isText);
         chatHistory.appendChild(messageDiv);
+        
+        // 4. Save history if required (we skip saving loading/error messages)
+        if (save && type !== 'loading' && type !== 'error') {
+            saveChatHistory();
+        }
+
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
     
@@ -2260,6 +2441,7 @@ document.addEventListener('DOMContentLoaded', () => {
              .replace(/'/g, "&#039;");
     }
 });
+
 
 --- END FILE: src\webview\main.js ---
 
@@ -2305,7 +2487,17 @@ body {
     background-color: var(--vscode-editor-background); 
     border: 1px solid var(--vscode-activityBar-border); /* Subtle border for separation */
     text-align: left;
+    white-space: normal; /* Allow normal text flow outside code blocks */
+}
+
+/* Ensure paragraph content inside assistant message wraps */
+.message.assistant p {
+    margin: 0 0 10px 0;
     white-space: pre-wrap;
+    word-break: break-word;
+}
+.message.assistant p:last-child {
+    margin-bottom: 0;
 }
 
 .message.error {
@@ -2313,18 +2505,68 @@ body {
     color: var(--vscode-editor-background);
 }
 
+.message.system.success {
+    background-color: var(--vscode-statusBarItem-prominentBackground); /* Use green color */
+    color: var(--vscode-statusBarItem-prominentForeground);
+    font-weight: 500;
+}
+
 .message.loading {
     font-style: italic;
     color: var(--vscode-editorInfo-foreground);
 }
 
+/* --- Code Block Styling (Standard Snippet) --- */
 .code-block {
     margin: 10px 0;
-    background-color: var(--vscode-widget-border); /* Slightly different from background */
-    padding: 10px;
+    background-color: var(--vscode-widget-border);
     border-radius: 4px;
+    overflow: hidden; /* Contains the header */
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: var(--vscode-editor-font-size, 13px);
+}
+/* Pre tag within standard code block needs padding */
+.code-block pre {
+    padding: 10px;
     overflow-x: auto;
-    font-family: monospace;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 10px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    background-color: var(--vscode-sideBarSectionHeader-background);
+    color: var(--vscode-sideBarSectionHeader-foreground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+}
+
+.standard-header {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    justify-content: flex-end; /* Only show copy button */
+}
+
+.copy-button {
+    background-color: var(--vscode-activityBarBadge-background);
+    color: var(--vscode-activityBarBadge-foreground);
+    border: none;
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+}
+.copy-button:hover {
+    filter: brightness(1.2);
 }
 
 .code-actions {
@@ -2341,10 +2583,64 @@ body {
     border: none;
     border-radius: 3px;
     font-size: 11px;
+    white-space: nowrap; /* Prevent button labels from wrapping */
+    transition: background-color 0.2s;
 }
 
 .code-actions button:hover {
     background-color: var(--vscode-button-hoverBackground);
+}
+
+
+/* --- FIND/REPLACE Specific Styling --- */
+.code-diff-block {
+    margin: 15px 0;
+    border: 1px solid var(--vscode-editorGroup-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--vscode-editor-background);
+}
+
+.diff-header {
+    background-color: var(--vscode-sideBarSectionHeader-background);
+    color: var(--vscode-sideBarSectionHeader-foreground);
+    border-top: 1px solid var(--vscode-editorGroup-border);
+    border-bottom: none; /* Let the next block handle separation */
+}
+.diff-header:first-child {
+    border-top: none;
+}
+
+.find-block, .replace-block {
+    padding: 0 10px;
+    background-color: var(--vscode-editor-background);
+}
+
+.find-block {
+    /* Subtle background for code being removed */
+    background-color: var(--vscode-diffEditor-removedTextBackground); 
+}
+
+.replace-block {
+    /* Subtle background for code being added */
+    background-color: var(--vscode-diffEditor-insertedTextBackground); 
+}
+
+.find-block pre, .replace-block pre {
+    /* Reset padding/margins for PRE tags inside blocks */
+    margin: 10px 0; 
+    padding: 0;
+    white-space: pre-wrap; /* Ensure text wraps */
+    word-break: break-all;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: var(--vscode-editor-font-size, 13px);
+    overflow-x: auto;
+}
+
+.replace-block .code-actions {
+    margin-top: 0; 
+    padding-bottom: 10px;
+    justify-content: flex-end; /* Align replacement button to the right */
 }
 
 
@@ -2357,11 +2653,15 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    /* Adding a subtle shadow to emphasize the control area separation */
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1); 
 }
 
 /* --- F2: Configuration Panel (Inline Key Setup) --- */
 #config-panel {
     display: flex;
+    flex-wrap: wrap; /* Allow wrapping for responsiveness */
+    align-items: center;
     gap: 8px;
     padding: 8px;
     border-radius: 4px;
@@ -2369,25 +2669,49 @@ body {
     border: 1px solid var(--vscode-editorWidget-border);
 }
 
-#api-key-input {
-    flex-grow: 1;
+#config-panel input[type="text"],
+#config-panel input[type="password"] {
+    /* Use 100% width when wrapped, or flexible when inline */
+    flex: 1 1 40%; 
+    min-width: 50px;
     padding: 0 8px;
     height: 30px;
     border: 1px solid var(--vscode-input-border);
     background-color: var(--vscode-inputBackground);
     color: var(--vscode-inputForeground);
     border-radius: 3px;
+    line-height: 30px; /* Vertically center placeholder text */
 }
+
+#profile-name-input {
+    /* No special flex-basis needed, general input styles handle it */
+}
+
+#api-key-input {
+    /* No special flex-basis needed, general input styles handle it */
+}
+
 #save-key-button {
     white-space: nowrap;
+    flex: 1 1 100%; /* Force button to take full width when wrapped */
+    min-height: 30px;
+}
+
+/* Ensure inputs stack if total width is small */
+@media (max-width: 250px) {
+    #config-panel input[type="text"],
+    #config-panel input[type="password"] {
+        flex: 1 1 100%;
+    }
 }
 
 
 /* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
 #context-header {
     display: flex;
-    align-items: center;
-    background-color: var(--vscode-inputBackground);
+    flex-direction: column; /* Start with vertical layout for narrow views */
+    align-items: stretch;
+    background-color: var(--vscode-editor-background); 
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
     min-height: 38px;
@@ -2396,11 +2720,54 @@ body {
 
 #context-file-controls {
     display: flex;
-    gap: 5px;
-    padding-right: 10px;
-    /* Removed redundant border-right to minimize visual noise, relying on spacing */
+    gap: 8px; 
+    padding-right: 0; /* Remove padding right */
+    border-right: none; /* Remove separator */
+    border-bottom: 1px solid var(--vscode-input-border); /* Add bottom separator */
+    padding-bottom: 5px;
+    margin-bottom: 5px;
     align-items: center;
+    flex-shrink: 0;
+    justify-content: space-between; /* Spread controls */
 }
+
+/* Profile Display */
+#profile-display {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: var(--vscode-list-deemphasizedForeground);
+    flex-shrink: 1; /* Allow profile selector to shrink */
+}
+
+#profile-selector {
+    background-color: var(--vscode-inputBackground);
+    color: var(--vscode-inputForeground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin-left: 5px;
+    margin-right: 5px;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    text-transform: capitalize; /* Make selected profile look nice */
+}
+#profile-selector:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+#edit-profiles-button {
+    background: none;
+    border: none;
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    margin-left: 5px;
+}
+
 
 #key-status-indicator {
     width: 8px;
@@ -2420,6 +2787,7 @@ body {
     display: flex;
     align-items: center;
     min-height: 28px;
+    overflow-x: hidden; /* Prevent horizontal overflow from file tags */
 }
 
 #context-placeholder {
@@ -2440,12 +2808,21 @@ body {
 .context-file-tag {
     display: inline-flex;
     align-items: center;
-    background-color: var(--vscode-badge-background); /* Use badge color for a distinctive look */
+    background-color: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
     border-radius: 3px;
     padding: 3px 6px;
     font-size: 12px;
     line-height: 1;
+    /* Ensure long filenames don't ruin layout */
+    max-width: 120px; 
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.context-file-tag span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .context-file-tag button {
     margin-left: 5px;
@@ -2488,9 +2865,10 @@ body {
     outline: none;
 }
 
-/* --- Icon Buttons (New Chat, Attachment) --- */
-#new-chat-button, 
-#add-context-file-button {
+/* --- Icon Buttons (Menu, Attachment, New Chat) --- */
+#menu-button, 
+#add-context-file-button,
+#new-chat-button {
     background: none;
     border: none;
     color: var(--vscode-foreground);
@@ -2502,11 +2880,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 3px;
 }
 
-#new-chat-button:hover,
-#add-context-file-button:hover {
+#menu-button:hover,
+#add-context-file-button:hover,
+#new-chat-button:hover {
     opacity: 1;
+    background-color: var(--vscode-list-hoverBackground);
 }
 
 /* --- Send Button (Arrow Icon) --- */
@@ -2593,10 +2974,63 @@ body {
     opacity: 0.6;
 }
 /* Ensure the palette responds gracefully to narrow sidebars */
+/* --- NEW: Options Menu (Three Dot Menu Dropdown) --- */
+#options-menu {
+    position: absolute; /* Relative to body/webview viewport */
+    z-index: 50;
+    width: 200px;
+    background-color: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    padding: 5px 0;
+}
+#options-menu.hidden {
+    display: none;
+}
+
+#menu-options-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 13px;
+}
+
+#menu-options-list li {
+    padding: 6px 15px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--vscode-menu-foreground);
+}
+
+#menu-options-list li:hover {
+    background-color: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+
+/* Media query for wider sidebars (e.g., > 300px) */
+@media (min-width: 300px) {
+    #context-header {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    #context-file-controls {
+        border-right: 1px solid var(--vscode-input-border);
+        border-bottom: none;
+        padding-right: 10px;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+}
+
+
 @media (max-width: 350px) {
     #command-palette {
         width: 95%;
     }
 }
+
 
 --- END FILE: src\webview\styles.css ---

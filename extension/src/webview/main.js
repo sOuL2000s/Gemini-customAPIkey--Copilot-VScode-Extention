@@ -1,14 +1,18 @@
 // src/webview/main.js
 // This script runs in the webview context.
 const vscode = acquireVsCodeApi();
+const CHAT_STORAGE_KEY = 'geminiCoderChatHistory';
+let chatMessages = []; // Stores { type: string, content: string, isText: boolean }
 
 document.addEventListener('DOMContentLoaded', () => {
     const chatHistory = document.getElementById('chat-history');
     const promptInput = document.getElementById('prompt-input');
     const sendButton = document.getElementById('send-button');
-    const newChatButton = document.getElementById('new-chat-button');
+    const newChatButton = document.getElementById('new-chat-button'); // Added back
+    const menuButton = document.getElementById('menu-button');
     const keyStatusIndicator = document.getElementById('key-status-indicator');
     const configPanel = document.getElementById('config-panel');
+    const profileNameInput = document.getElementById('profile-name-input'); // NEW
     const apiKeyInput = document.getElementById('api-key-input');
     const saveKeyButton = document.getElementById('save-key-button');
     
@@ -18,37 +22,246 @@ document.addEventListener('DOMContentLoaded', () => {
     const contextPlaceholder = document.getElementById('context-placeholder');
     const addContextFileButton = document.getElementById('add-context-file-button');
     
-    // R4: Command Palette Elements
-    const commandPalette = document.getElementById('command-palette');
+    // Profile Elements
+    const profileSelector = document.getElementById('profile-selector'); // NEW
+    const editProfilesButton = document.getElementById('edit-profiles-button'); // NEW
+
+    // NEW: Options Menu Elements
+    const optionsMenu = document.getElementById('options-menu');
+    const menuEditKeys = document.getElementById('menu-edit-keys');
+    const menuOpenProfilesSettings = document.getElementById('menu-open-profiles-settings');
+    const menuLatencySettings = document.getElementById('menu-latency-settings');
+
+    // R4: Command Palette Elements    const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
 
-    const initialWelcomeMessage = `
-        <div class="message system">
-            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
-        </div>`;
-
-    chatHistory.innerHTML = initialWelcomeMessage; 
+    const initialWelcomeMessageContent = "Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.";
 
     // Utility to post a message to the extension host (extension.ts)
     const postMessage = (command, payload = {}) => {
         vscode.postMessage({ command, ...payload });
     };
 
+    // --- Persistence and Rendering Helpers ---
+
+    // Utility to create the actual DOM element 
+    function createMessageElement(type, content, isText) {
+        const messageDiv = document.createElement('div');
+        if (type === 'success') {
+             messageDiv.classList.add('message', 'system', 'success');
+        } else {
+            messageDiv.classList.add('message', type);
+        }
+        if (isText) {
+            messageDiv.textContent = content;
+        } else {
+            messageDiv.innerHTML = content;
+        }
+        return messageDiv;
+    }
+
+    // Renders the full history from chatMessages array
+    function renderChatHistory() {
+        chatHistory.innerHTML = '';
+        
+        chatMessages.forEach(msg => {
+            if (msg.type !== 'loading') { // Don't render stale loading messages
+                const messageDiv = createMessageElement(msg.type, msg.content, msg.isText);
+                chatHistory.appendChild(messageDiv);
+            }
+        });
+        
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        attachCodeActionListeners(); // Re-attach listeners after rendering
+    }
+    
+    function saveChatHistory() {
+        try {
+            // Only save user, assistant, system, success messages. Skip transient ones.
+            const historyToSave = chatMessages.filter(m => 
+                m.type !== 'loading' && m.type !== 'error'
+            );
+            localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(historyToSave));
+        } catch (e) {
+            console.error("Failed to save chat history to local storage:", e);
+        }
+    }
+
+    function loadChatHistory() {
+        try {
+            const storedHistory = localStorage.getItem(CHAT_STORAGE_KEY);
+            if (storedHistory) {
+                const loadedMessages = JSON.parse(storedHistory);
+                if (Array.isArray(loadedMessages) && loadedMessages.length > 0) {
+                    chatMessages = loadedMessages;
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to load chat history from local storage. Starting fresh.", e);
+        }
+        
+        // If chatMessages is empty after loading, inject the welcome message
+        if (chatMessages.length === 0) {
+            chatMessages.push({ type: 'system', content: initialWelcomeMessageContent, isText: true });
+        }
+        renderChatHistory();
+    }
+    
+    /**
+     * Updates the profile dropdown selector (used primarily for internal tracking and config panel).
+     * @param {string[]} availableProfiles Array of profile names.
+     * @param {string} activeProfile The currently active profile name.
+     */
+    function updateProfileSelector(availableProfiles, activeProfile) {
+        // profileSelector is now hidden, but required by config-panel logic
+        profileSelector.innerHTML = ''; 
+        
+        const names = Array.isArray(availableProfiles) ? availableProfiles : [];
+
+        if (names.length === 0 || !names.includes(activeProfile)) {
+            names.push(activeProfile);
+        }
+        
+        const uniqueNames = [...new Set(names)].sort();
+
+        uniqueNames.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (name === activeProfile) {
+                option.selected = true;
+            }
+            profileSelector.appendChild(option);
+        });
+    }
+
+    // Initialize history on load
+    loadChatHistory();
+
     // --- F1: New Chat Session ---
     newChatButton.addEventListener('click', () => {
-        postMessage('newChat');
+        // Clear internal state and storage
+        chatMessages = [{ type: 'system', content: initialWelcomeMessageContent, isText: true }];
+        localStorage.removeItem(CHAT_STORAGE_KEY);
+        renderChatHistory(); 
+        
+        postMessage('newChat'); // Send message to extension to reset file context
+    });
+    
+    // --- F3: Options Menu Logic ---
+    menuButton.addEventListener('click', (e) => {
+        optionsMenu.classList.toggle('hidden');
+        if (!optionsMenu.classList.contains('hidden')) {
+            // Position the menu slightly below and aligned to the right edge of the button
+            const rect = menuButton.getBoundingClientRect();
+            
+            // Top: Align top of menu with bottom of button, plus a small offset (5px padding)
+            optionsMenu.style.top = `${rect.bottom + 5}px`; 
+            
+            // Right: Align right edge of menu with right edge of button/viewport edge
+            optionsMenu.style.right = `${window.innerWidth - rect.right}px`;
+            
+            optionsMenu.style.left = 'auto'; // Clear left positioning
+        }
+        e.stopPropagation(); 
     });
 
-    // --- F2: Inline API Key Configuration ---
-    saveKeyButton.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key) {
-            saveKeyButton.textContent = 'Saving...';
-            apiKeyInput.disabled = true;
-            saveKeyButton.disabled = true;
-            postMessage('saveKey', { key: key });
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!optionsMenu.contains(e.target) && e.target !== menuButton) {
+            optionsMenu.classList.add('hidden');
         }
     });
+    
+    // Open Edit Keys panel directly from menu
+    menuEditKeys.addEventListener('click', () => {
+        optionsMenu.classList.add('hidden');
+        configPanel.classList.remove('hidden'); // Show config panel
+        
+        // Re-use logic from editProfilesButton handler for input setup
+        apiKeyInput.value = '';
+        profileNameInput.value = '';
+        const selectedProfile = profileSelector.value;
+        if (selectedProfile && selectedProfile !== 'None') {
+            profileNameInput.setAttribute('placeholder', `Editing existing profile: ${selectedProfile}`);
+            profileNameInput.value = selectedProfile; 
+        } else {
+             profileNameInput.setAttribute('placeholder', `New Profile Name (required)`);
+        }
+        apiKeyInput.setAttribute('placeholder', `API Key (required)`);
+        profileNameInput.focus();
+    });
+
+    // Open Settings for gemini.profiles
+    menuOpenProfilesSettings.addEventListener('click', () => {
+        postMessage('openSettings', { settingKey: 'gemini.profiles' });
+        optionsMenu.classList.add('hidden');
+    });
+    
+    // Open Settings for latency debounce
+    menuLatencySettings.addEventListener('click', () => {
+        postMessage('openSettings', { settingKey: 'gemini.latency.debounceMs' });
+        optionsMenu.classList.add('hidden');
+    });
+
+
+    // --- F2/F5: Profile Management and Saving ---
+
+    // 1. Handle saving a new profile/key
+    saveKeyButton.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        let profileName = profileNameInput.value.trim();
+
+        if (key && profileName) {
+            saveKeyButton.textContent = 'Saving...';
+            apiKeyInput.disabled = true;
+            profileNameInput.disabled = true;
+            saveKeyButton.disabled = true;
+            postMessage('saveKey', { key: key, profileName: profileName });
+        } else if (key) {
+             // Fallback to default if name is missing but key is present
+            profileName = 'default';
+            saveKeyButton.textContent = 'Saving...';
+            apiKeyInput.disabled = true;
+            profileNameInput.disabled = true;
+            saveKeyButton.disabled = true;
+            postMessage('saveKey', { key: key, profileName: profileName });
+        }
+    });
+    
+    // 2. Handle profile selection switch
+    profileSelector.addEventListener('change', () => {
+        const profileName = profileSelector.value;
+        if (profileName && profileName !== 'None') {
+            postMessage('switchProfile', { profileName });
+            // Hide config panel after switching profiles
+            configPanel.classList.add('hidden');
+        }
+    });
+
+    // 3. Handle Edit Keys button: Toggle the simple config panel
+    editProfilesButton.addEventListener('click', () => {
+        optionsMenu.classList.add('hidden'); // Hide options menu if open
+        
+        configPanel.classList.toggle('hidden');
+        if (!configPanel.classList.contains('hidden')) {
+            // Clear inputs, then pre-fill name if an active profile is selected
+            apiKeyInput.value = '';
+            profileNameInput.value = '';
+            
+            const selectedProfile = profileSelector.value;
+            
+            if (selectedProfile && selectedProfile !== 'None') {
+                profileNameInput.setAttribute('placeholder', `Editing existing profile: ${selectedProfile}`);
+                profileNameInput.value = selectedProfile; 
+            } else {
+                 profileNameInput.setAttribute('placeholder', `New Profile Name (required)`);
+            }
+            apiKeyInput.setAttribute('placeholder', `API Key (required)`);
+            profileNameInput.focus();
+        }
+    });
+
 
     // --- F3: Contextual File Inclusion ---
     addContextFileButton.addEventListener('click', () => {
@@ -299,11 +512,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = event.data;
         const content = message.content;
 
-        const loadingMessage = chatHistory.querySelector('.message.loading');
-        if (loadingMessage) {
-            loadingMessage.remove();
-        }
-        
         // Re-enable inputs only AFTER a response or error is handled
         if (message.command === 'response' || message.command === 'error') {
             promptInput.disabled = false;
@@ -318,33 +526,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 saveKeyButton.textContent = 'Save & Activate';
                 apiKeyInput.disabled = false;
+                profileNameInput.disabled = false; // Re-enable profile input
                 saveKeyButton.disabled = false;
 
+                // Update Profile Display & Selector
+                const activeProfile = message.activeProfile || 'None';
+                updateProfileSelector(message.availableProfiles, activeProfile);
+                
                 if (message.keyStatus) {
                     keyStatusIndicator.classList.add('active');
-                    keyStatusIndicator.title = 'API Key Status: Active';
+                    keyStatusIndicator.title = `API Key Status: Active (Profile: ${activeProfile})`;
                     configPanel.classList.add('hidden');
                     contextHeader.classList.remove('hidden'); 
                     
-                    if (!wasActive && chatHistory.children.length === 0) {
-                        // Display clear confirmation if key was just activated and chat was empty
-                        appendMessage('success', 'Gemini API Key successfully validated and activated.');
-                        // Reinitialize welcome message
-                        chatHistory.innerHTML += initialWelcomeMessage;
+                    if (!wasActive && chatMessages.length === 1 && chatMessages[0].type === 'system') {
+                        // Display clear confirmation if key was just activated and chat was essentially empty (only welcome message)
+                        appendMessage('success', `Gemini API Key successfully validated and activated using profile: ${activeProfile}.`, true, false);
                     }
 
                 } else {
                     keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Please enter your key below.';
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Please enter your key below, or configure profiles in settings.';
                     configPanel.classList.remove('hidden');
                     contextHeader.classList.add('hidden'); 
-                    chatHistory.innerHTML = ''; // Clear chat history when key is missing
+                    
+                    // Clear state and storage when API key is missing/invalid
+                    // Ensure that we re-initialize the welcome message if the key is removed, 
+                    // otherwise the chat history will be completely blank until activation.
+                    chatMessages = [{ type: 'system', content: initialWelcomeMessageContent, isText: true }];
+                    localStorage.removeItem(CHAT_STORAGE_KEY);
+                    renderChatHistory(); // Render the welcome message
                 }
                 updateContextFileList(message.contextFiles || []);
                 break;
             
             case 'newChatConfirm':
-                chatHistory.innerHTML = initialWelcomeMessage;
+                // History was cleared by newChatButton handler. We only need to re-render.
+                renderChatHistory();
                 break;
             
             case 'openPalette':
@@ -352,15 +570,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'loading':
-                appendMessage('loading', content);
+                // Pass false for save, as loading is transient
+                appendMessage('loading', content, true, false); 
                 break;
             case 'response':
                 const formattedHtml = formatResponse(content);
-                appendMessage('assistant', formattedHtml, false); 
+                appendMessage('assistant', formattedHtml, false, true); 
                 attachCodeActionListeners();
                 break;
             case 'error':
-                appendMessage('error', content);
+                // Pass false for save, as errors should not persist in history
+                appendMessage('error', content, true, false); 
                 break;
         }
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -393,7 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prompt = promptInput.value.trim();
         if (!prompt) return;
 
-        appendMessage('user', prompt);
+        appendMessage('user', prompt, true, true); // Save user message
         
         // Reset height and disable input while request is pending
         promptInput.value = '';
@@ -408,24 +628,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 
-    // DOM Manipulation Helpers
-    function appendMessage(type, content, isText = true) {
-        const messageDiv = document.createElement('div');
-        // Handle custom styling for API key success notification
-        if (type === 'success') {
-             messageDiv.classList.add('message', 'system');
-             messageDiv.classList.add('success');
-        } else {
-            messageDiv.classList.add('message', type);
-        }
-
-        if (isText) {
-            messageDiv.textContent = content;
-        } else {
-            messageDiv.innerHTML = content;
+    // DOM Manipulation Helpers (Refactored for Persistence)
+    /**
+     * Appends a message to the DOM and updates the internal state array.
+     * @param type Message type (user, assistant, system, loading, error, success)
+     * @param content Message content (text or HTML)
+     * @param isText True if content is plain text, false if HTML
+     * @param save True if the message should be persisted to localStorage (default: true)
+     */
+    function appendMessage(type, content, isText = true, save = true) {
+        
+        // 1. Check if a loading message exists in state/DOM and remove it
+        const loadingIndex = chatMessages.findIndex(m => m.type === 'loading');
+        
+        if (loadingIndex !== -1) {
+            chatMessages.splice(loadingIndex, 1);
+            const loadingMessage = chatHistory.querySelector('.message.loading');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
         }
         
+        // 2. Add the new message to the internal state array
+        chatMessages.push({ type, content, isText });
+        
+        // 3. Update DOM 
+        const messageDiv = createMessageElement(type, content, isText);
         chatHistory.appendChild(messageDiv);
+        
+        // 4. Save history if required (we skip saving loading/error messages)
+        if (save && type !== 'loading' && type !== 'error') {
+            saveChatHistory();
+        }
+
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
     

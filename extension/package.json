@@ -2,7 +2,7 @@
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
   "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "publisher": "YourName",
   "repository": {
     "type": "git",
@@ -62,12 +62,16 @@
     "configuration": {
       "title": "Gemini Coder Configuration",
       "properties": {
-        "gemini.apiKey": {
+        "gemini.profiles": {
+          "type": "object",
+          "default": {},
+          "description": "A map of named Gemini API keys for different profiles (e.g., {'work': 'AIza...key1', 'personal': 'AIza...key2'}). Keys are automatically stored securely.",
+          "scope": "resource"
+        },
+        "gemini.activeProfile": {
           "type": "string",
           "default": "",
-          "description": "Your Google Gemini API Key. Required for all AI suggestions.",
-          "scope": "resource",
-          "isSecret": true
+          "description": "The name of the profile currently used for API calls (must match a name in gemini.profiles)."
         },
         "gemini.latency.debounceMs": {
           "type": "number",
