@@ -5,7 +5,6 @@
 .vscode-test-web/
 .git/
 .vscode/
-node_modules/
 src/**/*.ts
 *.map
 tsconfig.json
@@ -19,7 +18,7 @@ tsconfig.json
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
   "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "publisher": "YourName",
   "repository": {
     "type": "git",
@@ -64,17 +63,8 @@ tsconfig.json
         "command": "gemini-local-coder.openCommandPalette",
         "title": "Gemini Coder: Open Command Palette",
         "category": "Gemini Coder"
-      },
-      {
-        "command": "gemini-local-coder.acceptEdit",
-        "title": "Gemini Coder: Accept Suggested Edit (Alt+A)",
-        "category": "Gemini Coder"
-      },
-      {
-        "command": "gemini-local-coder.rejectEdit",
-        "title": "Gemini Coder: Reject Suggested Edit (Alt+R)",
-        "category": "Gemini Coder"
       }
+
     ],
     "keybindings": [
       {
@@ -82,29 +72,24 @@ tsconfig.json
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g",
         "when": "editorTextFocus"
-      },
-      {
-        "command": "gemini-local-coder.acceptEdit",
-        "key": "alt+a",
-        "mac": "alt+a",
-        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
-      },
-      {
-        "command": "gemini-local-coder.rejectEdit",
-        "key": "alt+r",
-        "mac": "alt+r",
-        "when": "editorTextFocus && geminiCoder.hasPendingEdit"
       }
+
     ],
     "configuration": {
       "title": "Gemini Coder Configuration",
       "properties": {
-        "gemini.apiKey": {
+        "gemini.activeApiKeyName": {
           "type": "string",
           "default": "",
-          "description": "Your Google Gemini API Key. Required for all AI suggestions.",
+          "description": "The name of the currently active Gemini API Key (managed via the sidebar panel).",
+          "scope": "resource"
+        },
+        "gemini.storedApiKeys": {
+          "type": "array",
+          "default": [],
+          "description": "Internal list of stored API key names (managed securely by the extension).",
           "scope": "resource",
-          "isSecret": true
+          "isHidden": true
         },
         "gemini.latency.debounceMs": {
           "type": "number",
@@ -121,7 +106,8 @@ tsconfig.json
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.108.1",
@@ -216,19 +202,6 @@ exports.ConfigurationManager = void 0;
 const vscode = __importStar(require("vscode"));
 class ConfigurationManager {
     /**
-     * Retrieves the Gemini API Key securely from the VS Code configuration.
-     * @returns The API key string, or undefined if not set or empty.
-     */
-    static getApiKey() {
-        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
-        const apiKey = config.get('apiKey');
-        // Safety check: Return undefined if the key is undefined or an empty string after trimming.
-        if (!apiKey || apiKey.trim() === '') {
-            return undefined;
-        }
-        return apiKey.trim();
-    }
-    /**
      * Retrieves the configured debounce delay in milliseconds, respecting bounds.
      */
     static getDebounceDelay() {
@@ -247,7 +220,7 @@ ConfigurationManager.CONFIG_SECTION = 'gemini';
 
 --- START FILE: out\ConfigurationManager.js.map ---
 
-{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAEjC,MAAa,oBAAoB;IAG7B;;;OAGG;IACI,MAAM,CAAC,SAAS;QACnB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,MAAM,MAAM,GAAG,MAAM,CAAC,GAAG,CAAS,QAAQ,CAAC,CAAC;QAE5C,4FAA4F;QAC5F,IAAI,CAAC,MAAM,IAAI,MAAM,CAAC,IAAI,EAAE,KAAK,EAAE,EAAE,CAAC;YAClC,OAAO,SAAS,CAAC;QACrB,CAAC;QACD,OAAO,MAAM,CAAC,IAAI,EAAE,CAAC;IACzB,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;;AA5BL,oDA6BC;AA5B2B,mCAAc,GAAG,QAAQ,CAAC"}
+{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAEjC,MAAa,oBAAoB;IAG7B;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;;AAbL,oDAcC;AAb2B,mCAAc,GAAG,QAAQ,CAAC"}
 
 --- END FILE: out\ConfigurationManager.js.map ---
 
@@ -409,8 +382,8 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const genai_1 = require("@google/genai");
-const ConfigurationManager_1 = require("./ConfigurationManager");
 const InlineCompletionProvider_1 = require("./InlineCompletionProvider");
+const SecretStorageManager_1 = require("./SecretStorageManager"); // NEW IMPORT
 // --- Configuration ---
 const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025";
 /**
@@ -428,19 +401,34 @@ function getNonce() {
  * Handles the sidebar view, communication with the editor, and DIRECT Gemini API calls.
  */
 class GeminiCoderProvider {
-    constructor(_extensionUri) {
+    constructor(_extensionUri, secretManager // NEW DEPENDENCY
+    ) {
         this._extensionUri = _extensionUri;
+        this.secretManager = secretManager;
         this.apiAgent = null;
         this.chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
         this.contextFiles = new Map();
-        // R5: State for tracking in-editor code suggestions
-        this.pendingEdit = null;
-        this.statusDisposables = [];
+        this.activeFileName = null; // 1. Track active file
+        this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+        // Listen for configuration changes (specifically activeApiKeyName)
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName')) {
+                this.initializeApiAgent();
+            }
+        });
+        // 1. Listen for active editor changes
+        vscode.window.onDidChangeActiveTextEditor(() => this.updateActiveFile());
     }
-    initializeApiAgent() {
-        const apiKey = ConfigurationManager_1.ConfigurationManager.getApiKey();
+    // 1. New method to track and update the active file
+    updateActiveFile() {
+        const editor = vscode.window.activeTextEditor;
+        this.activeFileName = editor ? editor.document.fileName.split(/[\/\\]/).pop() || null : null;
+        this.postViewStatus();
+    }
+    async initializeApiAgent() {
+        // Use the new manager to get the active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new genai_1.GoogleGenAI({ apiKey });
         }
@@ -451,10 +439,27 @@ class GeminiCoderProvider {
     }
     postViewStatus() {
         if (this._view) {
+            const activeKeyName = this.secretManager.getActiveKeyName() || null;
             this._view.webview.postMessage({
                 command: 'updateStatus',
                 keyStatus: this.apiAgent !== null,
-                contextFiles: Array.from(this.contextFiles.keys())
+                contextFiles: Array.from(this.contextFiles.keys()),
+                activeFile: this.activeFileName, // 1. Pass active file name
+                activeKeyName: activeKeyName // NEW: Pass active key name
+            });
+            // Also notify the webview immediately about key management details if panel is open
+            this.sendKeyManagementDetails();
+        }
+    }
+    // NEW: Handles fetching and sending all keys to the webview
+    async sendKeyManagementDetails() {
+        const activeKeyName = this.secretManager.getActiveKeyName() || '';
+        const keyNames = await this.secretManager.getAllKeyNames();
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: 'keyManagementDetails',
+                keys: keyNames.map(name => ({ name, isActive: name === activeKeyName })),
+                activeName: activeKeyName
             });
         }
     }
@@ -480,9 +485,33 @@ class GeminiCoderProvider {
                 case 'newChat':
                     this.handleNewChatSession();
                     return;
+                // DEPRECATED SETTINGS COMMAND:
+                case 'openSettings':
+                    // Direct users to configuration if they want to adjust debounce, 
+                    // but key management is handled internally.
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'gemini.latency.debounceMs');
+                    return;
                 case 'saveKey':
+                    // This command is now obsolete, kept for safety but unused.
                     this.handleSaveKey(message.key);
                     return;
+                // --- NEW Key Management Commands ---
+                case 'requestKeyManagementDetails':
+                    this.sendKeyManagementDetails();
+                    return;
+                case 'saveNewApiKey':
+                    this.handleSaveNewApiKey(message.name, message.key);
+                    return;
+                case 'requestDeleteConfirmation':
+                    this.handleDeleteConfirmation(message.name);
+                    return;
+                case 'deleteApiKey':
+                    this.handleDeleteApiKey(message.name);
+                    return;
+                case 'selectApiKey':
+                    this.handleSelectApiKey(message.name);
+                    return;
+                // --- END Key Management Commands ---
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -497,12 +526,77 @@ class GeminiCoderProvider {
         this.postViewStatus();
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
-    async handleSaveKey(key) {
-        const trimmedKey = key.trim();
-        if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update('apiKey', trimmedKey, vscode.ConfigurationTarget.Global);
+    // Obsolete: Replaced by multi-key management commands below.
+    async handleSaveKey(key) { }
+    // NEW: Handles displaying the native VS Code confirmation dialog
+    async handleDeleteConfirmation(name) {
+        const response = await vscode.window.showWarningMessage(`Are you sure you want to delete the API Key: '${name}'? This action cannot be undone.`, { modal: true }, 'Delete Key');
+        if (response === 'Delete Key') {
+            // If confirmed by the user in the native dialog, proceed to delete the key
+            this.handleDeleteApiKey(name);
         }
     }
+    // --- New Key Management Handlers ---
+    async handleSaveNewApiKey(name, key) {
+        name = name.trim();
+        key = key.trim();
+        if (!name || !key) {
+            this.sendMessageToWebview('error', 'API Key Name and Key value must not be empty.');
+            return;
+        }
+        try {
+            await this.secretManager.saveApiKey(name, key);
+            // If saving a new key, make it active
+            if (this.secretManager.getActiveKeyName() !== name) {
+                await this.secretManager.setActiveKeyName(name);
+            }
+            this.sendMessageToWebview('success', `API Key '${name}' saved and set as active.`);
+            this.sendKeyManagementDetails(); // Update panel view
+            this.initializeApiAgent(); // Refresh API agent connection
+        }
+        catch (e) {
+            console.error("Failed to save API key:", e);
+            this.sendMessageToWebview('error', `Failed to save API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    async handleDeleteApiKey(name) {
+        name = name.trim();
+        if (!name)
+            return;
+        try {
+            const wasActive = this.secretManager.getActiveKeyName() === name;
+            await this.secretManager.deleteApiKey(name);
+            if (wasActive) {
+                // If we deleted the active key, try to select the next available key
+                const remainingKeys = await this.secretManager.getAllKeyNames();
+                const newActive = remainingKeys.length > 0 ? remainingKeys[0] : '';
+                await this.secretManager.setActiveKeyName(newActive);
+            }
+            this.sendMessageToWebview('success', `API Key '${name}' deleted.`);
+            this.sendKeyManagementDetails();
+            this.initializeApiAgent();
+        }
+        catch (e) {
+            console.error("Failed to delete API key:", e);
+            this.sendMessageToWebview('error', `Failed to delete API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    async handleSelectApiKey(name) {
+        name = name.trim();
+        if (!name)
+            return;
+        try {
+            await this.secretManager.setActiveKeyName(name);
+            this.sendMessageToWebview('success', `API Key set to '${name}'.`);
+            this.sendKeyManagementDetails(); // Update UI list
+            this.initializeApiAgent(); // Refresh API agent connection
+        }
+        catch (e) {
+            console.error("Failed to select API key:", e);
+            this.sendMessageToWebview('error', `Failed to select API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    // --- End New Key Management Handlers ---
     async handleAddFileContext() {
         const options = {
             canSelectMany: false,
@@ -536,103 +630,6 @@ class GeminiCoderProvider {
         this.contextFiles.delete(uriPath);
         this.postViewStatus();
     }
-    /**
-     * R5: Utility to parse the LLM's contextual edit format and return the parts,
-     * regardless of whether an editor selection exists.
-     */
-    parseContextualEdit(response) {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
-            return null;
-        }
-        // We clear any existing pending edit immediately upon new submission
-        this.clearPendingEdit();
-        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
-        const description = parts[0].trim();
-        const editContent = parts.length > 1 ? parts[1].trim() : '';
-        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
-        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
-        if (diffParts.length !== 2) {
-            console.warn("Malformed CONTEXTUAL_EDIT received.");
-            return null;
-        }
-        const [removedCode, replacementCode] = diffParts;
-        return { description, removedCode, replacementCode };
-    }
-    /**
-     * R5: Manages the custom VS Code context key and status bar message.
-     */
-    updatePendingEditContext(hasEdit) {
-        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
-        this.statusDisposables.forEach(d => d.dispose());
-        this.statusDisposables = [];
-        if (hasEdit && this.pendingEdit) {
-            const editor = vscode.window.activeTextEditor;
-            // Only show status bar message if the edit applies to the current active document
-            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
-                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
-                this.statusDisposables.push(
-                // Show a persistent status bar message
-                vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000));
-            }
-        }
-    }
-    /**
-     * R5: Clears the pending edit state and status UI.
-     */
-    clearPendingEdit() {
-        this.pendingEdit = null;
-        this.updatePendingEditContext(false);
-    }
-    /**
-     * R5: Accepts and applies the pending in-editor code suggestion.
-     */
-    async acceptEdit() {
-        if (!this.pendingEdit) {
-            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
-            return;
-        }
-        const currentUri = vscode.window.activeTextEditor?.document.uri;
-        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
-            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
-            this.clearPendingEdit(); // Clear old edit if context is lost
-            return;
-        }
-        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
-        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
-        if (success) {
-            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
-        }
-        else {
-            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
-            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
-            // Fallback to sending the code to the chat view
-            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
-            const fallbackContent = `
-Edit Failed to Apply: ${this.pendingEdit.description}
-
-You can manually insert the replacement code:
-\`\`\`${languageId}
-${this.pendingEdit.replacementCode}
-\`\`\`
-`;
-            this.sendMessageToWebview('response', fallbackContent);
-        }
-        this.clearPendingEdit();
-    }
-    /**
-     * R5: Rejects the pending in-editor code suggestion.
-     */
-    rejectEdit() {
-        if (this.pendingEdit) {
-            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
-            this.clearPendingEdit();
-        }
-        else {
-            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
-        }
-    }
     async handlePromptSubmission(userPrompt) {
         if (!this._view || !this.apiAgent) {
             return;
@@ -660,24 +657,30 @@ ${this.pendingEdit.replacementCode}
                     contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
                 }
             }
-            // System instruction remains to enforce the custom chat format
+            // System instruction enforces the requested chat output format (Find/Replace blocks)
             const systemInstruction = `
-                You are an expert Senior Software Engineer specializing in ${languageId}.
-                Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
+                You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
+                Your goal is to assist the user with code modification, generation, debugging, and refactoring.
                 ${contextBlock}
                 
-                CRITICAL CONSTRAINT: If the user requests any code modification, update, or insertion, you MUST respond using ONE of the following formats. DO NOT use both.
+                CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
+                DO NOT use conversational filler, explanations, or commentary outside of these structures.
                 
-                1. A standard markdown code block (\`\`\`language\`).
-                2. The precise contextual edit format (for inline changes to the selected code):
+                1. For code modifications (deletion, replacement, or insertion within existing code):
                 
-                [Brief description of the change]
-                [[CONTEXTUAL_EDIT]]
-                [Lines of existing code to be REMOVED (keep original indentation)]
-                [[---]]
-                [Lines of new code to be ADDED (with correct indentation)]
-
-                DO NOT add extra commentary outside the chosen block structure.
+                --- FIND ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                --- REPLACE ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
             `;
             const userContent = `
                 --- Selected Code Context ---
@@ -694,38 +697,7 @@ ${this.pendingEdit.replacementCode}
                 }
             });
             if (response && response.text) {
-                // R5: Check for in-editor contextual edit format
-                const parsedEdit = this.parseContextualEdit(response.text);
-                if (parsedEdit) {
-                    const hasSelection = !editor.selection.isEmpty;
-                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
-                    if (hasSelection) {
-                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
-                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
-                        const workspaceEdit = new vscode.WorkspaceEdit();
-                        workspaceEdit.replace(document.uri, editor.selection, parsedEdit.replacementCode);
-                        // Store the pending edit
-                        this.pendingEdit = {
-                            description: parsedEdit.description || 'Code change suggested',
-                            edit: workspaceEdit,
-                            documentUri: document.uri,
-                            range: editor.selection,
-                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
-                        };
-                        this.updatePendingEditContext(true);
-                        // Use the description stored in pendingEdit, which includes the fallback
-                        const editDescription = this.pendingEdit.description;
-                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
-                        return;
-                    }
-                    else if (!hasSelection) {
-                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
-                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
-                        this.sendMessageToWebview('response', markdownResponse);
-                        return;
-                    }
-                }
-                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
+                // Since we removed in-editor editing, send the response directly to the chat view
                 this.sendMessageToWebview('response', response.text);
             }
             else {
@@ -801,18 +773,15 @@ ${this.pendingEdit.replacementCode}
                 
                 <div id="bottom-controls">
                     
-                    <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
-                        <button id="save-key-button">Save & Activate</button>
-                    </div>
+                    <!-- 4. Removed inline config panel -->
 
                     <div id="context-header">
                         <div id="context-file-controls">
                             
-                            <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
+                            <button id="add-context-file-button" title="Add file context (File Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
-                                    <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
                                 </svg>
                             </button>
                             
@@ -822,18 +791,42 @@ ${this.pendingEdit.replacementCode}
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+                            
+                            <!-- API Key Management Toggle Button -->
+                            <button id="key-management-toggle" title="Manage API Keys">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
+                                </svg>
+                            </button>
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
                             <ul id="context-file-list">
                                 <!-- Files loaded here -->
                             </ul>
-                            <span id="context-placeholder">Describe what to build next</span>
+                            <span id="active-file-indicator"></span> <!-- 1. New indicator for active file -->
                         </div>
                     </div>
-                
+                    
+                    <!-- NEW: Key Management Panel -->
+                    <div id="key-management-panel" style="display: none;">
+                        <div class="panel-section">
+                            <h4>Active Key Selection</h4>
+                            <ul id="key-list">
+                                <!-- Key buttons loaded here -->
+                            </ul>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Add/Update API Key</h4>
+                            <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required>
+                            <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required>
+                            <button id="key-save-button">Save & Set Active</button>
+                        </div>
+                    </div>
+
                     <div id="action-bar">
-                        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="1"></textarea>
+                        <textarea id="prompt-input" placeholder="Describe what to build next" rows="1"></textarea> <!-- 2. Updated placeholder -->
                         <button id="send-button" title="Send Prompt (Arrow Icon)">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -871,15 +864,16 @@ GeminiCoderProvider.viewType = 'geminiCoderView';
 // --- Extension Activation ---
 function activate(context) {
     console.log('Gemini Local Coder extension is now active!');
-    const provider = new GeminiCoderProvider(context.extensionUri);
+    // Initialize Secret Storage Manager
+    const secretManager = new SecretStorageManager_1.SecretStorageManager(context.secrets);
+    const provider = new GeminiCoderProvider(context.extensionUri, secretManager); // Pass manager
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider));
     // R5: Register Command Palette Command
     context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.openCommandPalette', () => {
         provider.openCommandPalette();
     }));
-    // R5: Register Edit Commands
-    context.subscriptions.push(vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()), vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit()));
-    const inlineProvider = new InlineCompletionProvider_1.GeminiInlineCompletionProvider();
+    // Pass manager to inline provider
+    const inlineProvider = new InlineCompletionProvider_1.GeminiInlineCompletionProvider(secretManager);
     const selector = { language: '*', scheme: 'file' };
     context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider(selector, inlineProvider));
     console.log('Gemini Inline Completion Provider registered.');
@@ -891,7 +885,7 @@ function deactivate() { }
 
 --- START FILE: out\extension.js.map ---
 
-{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\extension.js.map ---
 
@@ -940,15 +934,22 @@ const DebounceController_1 = require("./DebounceController");
 const ConfigurationManager_1 = require("./ConfigurationManager");
 const MAX_CONTEXT_CHARS = 200000; // Limit context size
 class GeminiInlineCompletionProvider {
-    constructor() {
+    constructor(secretManager) {
+        this.secretManager = secretManager;
         this.apiAgent = null;
         this.model = 'gemini-2.5-flash';
         this.debounceController = new DebounceController_1.DebounceController(() => ConfigurationManager_1.ConfigurationManager.getDebounceDelay());
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+        // Listen for configuration changes related to active key or debounce
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName') || e.affectsConfiguration('gemini.latency.debounceMs')) {
+                this.initializeApiAgent();
+            }
+        });
     }
-    initializeApiAgent() {
-        const apiKey = ConfigurationManager_1.ConfigurationManager.getApiKey();
+    async initializeApiAgent() {
+        // Use SecretStorageManager to get the currently active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new genai_1.GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");
@@ -1045,9 +1046,167 @@ exports.GeminiInlineCompletionProvider = GeminiInlineCompletionProvider;
 
 --- START FILE: out\InlineCompletionProvider.js.map ---
 
-{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\InlineCompletionProvider.js.map ---
+
+--- START FILE: out\SecretStorageManager.js ---
+
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SecretStorageManager = void 0;
+// src/SecretStorageManager.ts
+const vscode = __importStar(require("vscode"));
+const SECRET_KEY_PREFIX = 'gemini.apikey.';
+class SecretStorageManager {
+    constructor(secrets) {
+        this.secrets = secrets;
+    }
+    getKeyStorageId(name) {
+        return SECRET_KEY_PREFIX + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+    /**
+     * Retrieves the list of all stored API key names.
+     */
+    async getAllKeyNames() {
+        const keys = await this.secrets.keys();
+        const names = [];
+        // Due to VS Code Secret Storage implementation details, keys() returns internal IDs.
+        // We have to iterate and find which stored IDs belong to us, 
+        // and map them back if possible. For simplicity, we currently rely on external storage
+        // of key names or derive them, but here we iterate over all keys hoping VS Code
+        // eventually supports better key management indexing.
+        // For this implementation, we rely on the provider re-requesting the active name
+        // and the list of names derived from stored key IDs.
+        // NOTE: In a real-world scenario, storing a manifest of user-friendly names 
+        // linked to cryptic SecretStorage IDs is often necessary. 
+        // For this plaintext implementation, we will fetch keys and assume the provider 
+        // will keep track of user-friendly names vs internal SecretStorage names. 
+        // We will prioritize Configuration for active name management.
+        const configKeys = await this.getStoredConfigKeyNames();
+        return configKeys.filter(name => name.trim() !== '');
+    }
+    // Since VSCode Secret Storage keys() method is implementation-dependent, 
+    // we use a workaround by assuming key names are stored in a configuration entry 
+    // that we manage, or we query keys iteratively.
+    // Given the constraints, let's simplify and rely on the extension host 
+    // managing the map of names if necessary, but keep CRUD simple by prefixing.
+    // For now, we manually manage a list of names if we can't iterate stored keys reliably.
+    // To keep it simple, we store a list of names in a public setting:
+    async getStoredConfigKeyNames() {
+        const config = vscode.workspace.getConfiguration('gemini');
+        const storedNames = config.get('storedApiKeys') || [];
+        return storedNames;
+    }
+    async setStoredConfigKeyNames(names) {
+        await vscode.workspace.getConfiguration('gemini').update('storedApiKeys', Array.from(new Set(names)), // Ensure uniqueness
+        vscode.ConfigurationTarget.Global);
+    }
+    /**
+     * Retrieves the API key for the given name.
+     */
+    async getApiKey(name) {
+        if (!name)
+            return undefined;
+        return this.secrets.get(this.getKeyStorageId(name));
+    }
+    /**
+     * Saves a new API key or updates an existing one.
+     */
+    async saveApiKey(name, key) {
+        if (!name || !key)
+            throw new Error("Name and key required.");
+        const internalId = this.getKeyStorageId(name);
+        await this.secrets.store(internalId, key.trim());
+        // Update list of configured names
+        const names = await this.getStoredConfigKeyNames();
+        if (!names.includes(name)) {
+            names.push(name);
+            await this.setStoredConfigKeyNames(names);
+        }
+    }
+    /**
+     * Deletes a stored API key.
+     */
+    async deleteApiKey(name) {
+        if (!name)
+            return;
+        const internalId = this.getKeyStorageId(name);
+        await this.secrets.delete(internalId);
+        // Update list of configured names
+        const names = await this.getStoredConfigKeyNames();
+        const updatedNames = names.filter(n => n !== name);
+        await this.setStoredConfigKeyNames(updatedNames);
+    }
+    // --- Active Key Management (Uses VS Code Configuration) ---
+    /**
+     * Gets the name of the currently active key from configuration.
+     */
+    getActiveKeyName() {
+        const config = vscode.workspace.getConfiguration('gemini');
+        const activeName = config.get('activeApiKeyName');
+        return activeName?.trim() || undefined;
+    }
+    /**
+     * Sets the currently active key name in configuration.
+     */
+    async setActiveKeyName(name) {
+        await vscode.workspace.getConfiguration('gemini').update('activeApiKeyName', name, vscode.ConfigurationTarget.Global);
+    }
+    /**
+     * Retrieves the actual API key content for the currently active key.
+     */
+    async getActiveApiKey() {
+        const activeName = this.getActiveKeyName();
+        if (!activeName) {
+            return undefined;
+        }
+        return this.getApiKey(activeName);
+    }
+}
+exports.SecretStorageManager = SecretStorageManager;
+//# sourceMappingURL=SecretStorageManager.js.map
+
+--- END FILE: out\SecretStorageManager.js ---
+
+--- START FILE: out\SecretStorageManager.js.map ---
+
+{"version":3,"file":"SecretStorageManager.js","sourceRoot":"","sources":["../src/SecretStorageManager.ts"],"names":[],"mappings":"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"}
+
+--- END FILE: out\SecretStorageManager.js.map ---
 
 --- START FILE: src\ConfigurationManager.ts ---
 
@@ -1056,21 +1215,6 @@ import * as vscode from 'vscode';
 
 export class ConfigurationManager {
     private static readonly CONFIG_SECTION = 'gemini';
-
-    /**
-     * Retrieves the Gemini API Key securely from the VS Code configuration.
-     * @returns The API key string, or undefined if not set or empty.
-     */
-    public static getApiKey(): string | undefined {
-        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
-        const apiKey = config.get<string>('apiKey');
-        
-        // Safety check: Return undefined if the key is undefined or an empty string after trimming.
-        if (!apiKey || apiKey.trim() === '') {
-            return undefined;
-        }
-        return apiKey.trim();
-    }
 
     /**
      * Retrieves the configured debounce delay in milliseconds, respecting bounds.
@@ -1173,6 +1317,7 @@ import * as vscode from 'vscode';
 import { GoogleGenAI } from '@google/genai';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
+import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
 
 // --- Configuration ---
 const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025"; 
@@ -1201,18 +1346,35 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
     private contextFiles: Map<string, string> = new Map(); 
+    private activeFileName: string | null = null; // 1. Track active file
     
-    // R5: State for tracking in-editor code suggestions
-    private pendingEdit: { description: string, edit: vscode.WorkspaceEdit, documentUri: vscode.Uri, range: vscode.Range, replacementCode: string } | null = null;
-    private statusDisposables: vscode.Disposable[] = [];
-
-    constructor(private readonly _extensionUri: vscode.Uri) {
+    constructor(
+        private readonly _extensionUri: vscode.Uri,
+        private readonly secretManager: SecretStorageManager // NEW DEPENDENCY
+    ) {
+        this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+
+        // Listen for configuration changes (specifically activeApiKeyName)
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName')) {
+                this.initializeApiAgent();
+            }
+        });
+        // 1. Listen for active editor changes
+        vscode.window.onDidChangeActiveTextEditor(() => this.updateActiveFile());
     }
     
-    private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+    // 1. New method to track and update the active file
+    private updateActiveFile() {
+        const editor = vscode.window.activeTextEditor;
+        this.activeFileName = editor ? editor.document.fileName.split(/[\/\\]/).pop() || null : null;
+        this.postViewStatus();
+    }
+    
+    private async initializeApiAgent() { // Now async
+        // Use the new manager to get the active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
         } else {
@@ -1223,12 +1385,32 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
     private postViewStatus() {
         if (this._view) {
+            const activeKeyName = this.secretManager.getActiveKeyName() || null;
+            
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
                 keyStatus: this.apiAgent !== null,
-                contextFiles: Array.from(this.contextFiles.keys())
+                contextFiles: Array.from(this.contextFiles.keys()),
+                activeFile: this.activeFileName, // 1. Pass active file name
+                activeKeyName: activeKeyName // NEW: Pass active key name
             });
+            // Also notify the webview immediately about key management details if panel is open
+            this.sendKeyManagementDetails();
         }
+    }
+    
+    // NEW: Handles fetching and sending all keys to the webview
+    private async sendKeyManagementDetails() {
+         const activeKeyName = this.secretManager.getActiveKeyName() || '';
+         const keyNames = await this.secretManager.getAllKeyNames();
+         
+         if (this._view) {
+             this._view.webview.postMessage({
+                 command: 'keyManagementDetails',
+                 keys: keyNames.map(name => ({ name, isActive: name === activeKeyName })),
+                 activeName: activeKeyName
+             });
+         }
     }
 
     public resolveWebviewView(
@@ -1259,9 +1441,33 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'newChat':
                     this.handleNewChatSession();
                     return;
+                // DEPRECATED SETTINGS COMMAND:
+                case 'openSettings': 
+                    // Direct users to configuration if they want to adjust debounce, 
+                    // but key management is handled internally.
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'gemini.latency.debounceMs');
+                    return;
                 case 'saveKey':
+                    // This command is now obsolete, kept for safety but unused.
                     this.handleSaveKey(message.key);
                     return;
+                // --- NEW Key Management Commands ---
+                case 'requestKeyManagementDetails':
+                    this.sendKeyManagementDetails();
+                    return;
+                case 'saveNewApiKey':
+                    this.handleSaveNewApiKey(message.name, message.key);
+                    return;
+                case 'requestDeleteConfirmation':
+                    this.handleDeleteConfirmation(message.name);
+                    return;
+                case 'deleteApiKey':
+                    this.handleDeleteApiKey(message.name);
+                    return;
+                case 'selectApiKey':
+                    this.handleSelectApiKey(message.name);
+                    return;
+                // --- END Key Management Commands ---
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -1278,16 +1484,89 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
 
-    private async handleSaveKey(key: string) {
-        const trimmedKey = key.trim();
-        if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update(
-                'apiKey', 
-                trimmedKey, 
-                vscode.ConfigurationTarget.Global
-            );
+    // Obsolete: Replaced by multi-key management commands below.
+    private async handleSaveKey(key: string) { /* NOOP */ }
+    
+    // NEW: Handles displaying the native VS Code confirmation dialog
+    private async handleDeleteConfirmation(name: string) {
+        const response = await vscode.window.showWarningMessage(
+            `Are you sure you want to delete the API Key: '${name}'? This action cannot be undone.`,
+            { modal: true }, 
+            'Delete Key'
+        );
+
+        if (response === 'Delete Key') {
+            // If confirmed by the user in the native dialog, proceed to delete the key
+            this.handleDeleteApiKey(name); 
         }
     }
+
+    // --- New Key Management Handlers ---
+    private async handleSaveNewApiKey(name: string, key: string) {
+        name = name.trim();
+        key = key.trim();
+        if (!name || !key) {
+            this.sendMessageToWebview('error', 'API Key Name and Key value must not be empty.');
+            return;
+        }
+
+        try {
+            await this.secretManager.saveApiKey(name, key);
+            
+            // If saving a new key, make it active
+            if (this.secretManager.getActiveKeyName() !== name) {
+                 await this.secretManager.setActiveKeyName(name);
+            }
+             
+            this.sendMessageToWebview('success', `API Key '${name}' saved and set as active.`);
+            this.sendKeyManagementDetails(); // Update panel view
+            this.initializeApiAgent();       // Refresh API agent connection
+        } catch (e) {
+            console.error("Failed to save API key:", e);
+            this.sendMessageToWebview('error', `Failed to save API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    
+    private async handleDeleteApiKey(name: string) {
+        name = name.trim();
+        if (!name) return;
+        
+        try {
+            const wasActive = this.secretManager.getActiveKeyName() === name;
+            
+            await this.secretManager.deleteApiKey(name);
+            
+            if (wasActive) {
+                // If we deleted the active key, try to select the next available key
+                const remainingKeys = await this.secretManager.getAllKeyNames();
+                const newActive = remainingKeys.length > 0 ? remainingKeys[0] : '';
+                await this.secretManager.setActiveKeyName(newActive);
+            }
+            
+            this.sendMessageToWebview('success', `API Key '${name}' deleted.`);
+            this.sendKeyManagementDetails();
+            this.initializeApiAgent();
+        } catch (e) {
+             console.error("Failed to delete API key:", e);
+            this.sendMessageToWebview('error', `Failed to delete API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    
+    private async handleSelectApiKey(name: string) {
+        name = name.trim();
+        if (!name) return;
+        
+        try {
+            await this.secretManager.setActiveKeyName(name);
+            this.sendMessageToWebview('success', `API Key set to '${name}'.`);
+            this.sendKeyManagementDetails(); // Update UI list
+            this.initializeApiAgent();      // Refresh API agent connection
+        } catch (e) {
+             console.error("Failed to select API key:", e);
+            this.sendMessageToWebview('error', `Failed to select API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    // --- End New Key Management Handlers ---
 
     private async handleAddFileContext() {
         const options: vscode.OpenDialogOptions = {
@@ -1328,122 +1607,6 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
     
-    /**
-     * R5: Utility to parse the LLM's contextual edit format and return the parts, 
-     * regardless of whether an editor selection exists.
-     */
-    private parseContextualEdit(response: string): { description: string, removedCode: string, replacementCode: string } | null {
-        const CONTEXTUAL_EDIT_MARKER = "[[CONTEXTUAL_EDIT]]";
-        const DIFF_SEPARATOR = "[[---]]";
-
-        if (!response.includes(CONTEXTUAL_EDIT_MARKER)) {
-            return null;
-        }
-
-        // We clear any existing pending edit immediately upon new submission
-        this.clearPendingEdit();
-
-        const parts = response.split(CONTEXTUAL_EDIT_MARKER);
-        const description = parts[0].trim();
-        const editContent = parts.length > 1 ? parts[1].trim() : '';
-
-        const diffParts = editContent.split(DIFF_SEPARATOR).map(p => p.trim());
-
-        // Must match the exact format: [Description] [[CONTEXTUAL_EDIT]] [Removed] [[---]] [Added]
-        if (diffParts.length !== 2) {
-            console.warn("Malformed CONTEXTUAL_EDIT received.");
-            return null;
-        }
-        
-        const [removedCode, replacementCode] = diffParts;
-
-        return { description, removedCode, replacementCode };
-    }
-
-    /**
-     * R5: Manages the custom VS Code context key and status bar message.
-     */
-    private updatePendingEditContext(hasEdit: boolean) {
-        vscode.commands.executeCommand('setContext', 'geminiCoder.hasPendingEdit', hasEdit);
-
-        this.statusDisposables.forEach(d => d.dispose());
-        this.statusDisposables = [];
-
-        if (hasEdit && this.pendingEdit) {
-            const editor = vscode.window.activeTextEditor;
-            // Only show status bar message if the edit applies to the current active document
-            if (editor && editor.document.uri.toString() === this.pendingEdit.documentUri.toString()) {
-                const message = `Gemini Edit Ready: ${this.pendingEdit.description} | Alt+A Accept | Alt+R Reject`;
-                this.statusDisposables.push(
-                    // Show a persistent status bar message
-                    vscode.window.setStatusBarMessage(`$(lightbulb) ${message}`, 1000000) 
-                );
-            }
-        }
-    }
-
-    /**
-     * R5: Clears the pending edit state and status UI.
-     */
-    private clearPendingEdit() {
-        this.pendingEdit = null;
-        this.updatePendingEditContext(false);
-    }
-
-    /**
-     * R5: Accepts and applies the pending in-editor code suggestion.
-     */
-    public async acceptEdit() {
-        if (!this.pendingEdit) {
-            vscode.window.showInformationMessage('No active Gemini suggestion to accept.');
-            return;
-        }
-        
-        const currentUri = vscode.window.activeTextEditor?.document.uri;
-
-        if (!currentUri || currentUri.toString() !== this.pendingEdit.documentUri.toString()) {
-            vscode.window.showErrorMessage('Cannot apply edit: Active file changed or document mismatch.');
-            this.clearPendingEdit(); // Clear old edit if context is lost
-            return;
-        }
-
-        // The stored pendingEdit already contains the WorkspaceEdit needed for replacement
-        const success = await vscode.workspace.applyEdit(this.pendingEdit.edit);
-
-        if (success) {
-            vscode.window.showInformationMessage(`Gemini edit accepted: ${this.pendingEdit.description}`);
-        } else {
-            // Failed to apply edit. Inform the user and provide the code in the chat sidebar.
-            vscode.window.showErrorMessage(`Failed to apply Gemini edit: ${this.pendingEdit.description}. Sending code to chat for manual insertion.`);
-            
-            // Fallback to sending the code to the chat view
-            const languageId = vscode.window.activeTextEditor?.document.languageId || 'text';
-            const fallbackContent = `
-Edit Failed to Apply: ${this.pendingEdit.description}
-
-You can manually insert the replacement code:
-\`\`\`${languageId}
-${this.pendingEdit.replacementCode}
-\`\`\`
-`;
-            this.sendMessageToWebview('response', fallbackContent);
-        }
-
-        this.clearPendingEdit();
-    }
-
-    /**
-     * R5: Rejects the pending in-editor code suggestion.
-     */
-    public rejectEdit() {
-        if (this.pendingEdit) {
-            vscode.window.showInformationMessage(`Gemini edit rejected: ${this.pendingEdit.description}`);
-            this.clearPendingEdit();
-        } else {
-            vscode.window.showInformationMessage('No active Gemini suggestion to reject.');
-        }
-    }
-
     private async handlePromptSubmission(userPrompt: string) {
         if (!this._view || !this.apiAgent) { return; }
 
@@ -1476,24 +1639,30 @@ ${this.pendingEdit.replacementCode}
                 }
             }
 
-            // System instruction remains to enforce the custom chat format
+            // System instruction enforces the requested chat output format (Find/Replace blocks)
             const systemInstruction = `
-                You are an expert Senior Software Engineer specializing in ${languageId}.
-                Your goal is to assist the user with code generation, explanation, debugging, and refactoring.
+                You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
+                Your goal is to assist the user with code modification, generation, debugging, and refactoring.
                 ${contextBlock}
                 
-                CRITICAL CONSTRAINT: If the user requests any code modification, update, or insertion, you MUST respond using ONE of the following formats. DO NOT use both.
+                CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
+                DO NOT use conversational filler, explanations, or commentary outside of these structures.
                 
-                1. A standard markdown code block (\`\`\`language\`).
-                2. The precise contextual edit format (for inline changes to the selected code):
+                1. For code modifications (deletion, replacement, or insertion within existing code):
                 
-                [Brief description of the change]
-                [[CONTEXTUAL_EDIT]]
-                [Lines of existing code to be REMOVED (keep original indentation)]
-                [[---]]
-                [Lines of new code to be ADDED (with correct indentation)]
-
-                DO NOT add extra commentary outside the chosen block structure.
+                --- FIND ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                --- REPLACE ---
+                
+                \`\`\`${languageId}
+                
+                \`\`\`
+                
+                2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
             `;
 
             const userContent = `
@@ -1513,48 +1682,7 @@ ${this.pendingEdit.replacementCode}
             });
             
             if (response && response.text) {
-                
-                // R5: Check for in-editor contextual edit format
-                const parsedEdit = this.parseContextualEdit(response.text);
-
-                if (parsedEdit) {
-                    const hasSelection = !editor.selection.isEmpty;
-                    const modelProvidedRemoval = parsedEdit.removedCode.trim() !== '';
-                    
-                    if (hasSelection) {
-                        // Case 1: An active selection exists. Assume the edit is meant to REPLACE the selection (In-Editor Edit).
-                        // Note: We use the existing selection range regardless of what the model put in `removedCode`.
-                        const workspaceEdit = new vscode.WorkspaceEdit();
-                        workspaceEdit.replace(
-                            document.uri, 
-                            editor.selection, 
-                            parsedEdit.replacementCode
-                        );
-
-                        // Store the pending edit
-                        this.pendingEdit = {
-                            description: parsedEdit.description || 'Code change suggested',
-                            edit: workspaceEdit,
-                            documentUri: document.uri,
-                            range: editor.selection,
-                            replacementCode: parsedEdit.replacementCode // Store the raw text for debugging/failure recovery
-                        };
-
-                        this.updatePendingEditContext(true);
-                        // Use the description stored in pendingEdit, which includes the fallback
-                        const editDescription = this.pendingEdit!.description;
-                        this.sendMessageToWebview('response', `Gemini proposed an in-editor edit: "${editDescription}". Use Alt+A (Accept) or Alt+R (Reject) in the editor.`);
-                        return; 
-                        
-                    } else if (!hasSelection) {
-                        // Case 2: No selection. Treat as a new block insertion (Markdown Block in Chat).
-                        const markdownResponse = `${parsedEdit.description}\n\n\`\`\`${languageId}\n${parsedEdit.replacementCode}\n\`\`\``;
-                        this.sendMessageToWebview('response', markdownResponse);
-                        return;
-                    }
-                }
-                
-                // Fallback: If not a contextual edit, or if the edit was unsuitable for native injection, send raw response to chat view
+                // Since we removed in-editor editing, send the response directly to the chat view
                 this.sendMessageToWebview('response', response.text);
             } else {
                 this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
@@ -1573,7 +1701,7 @@ ${this.pendingEdit.replacementCode}
         }
     }
     
-    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette', content: string) {
+    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette' | 'success', content: string) {
         if (this._view) {
             this._view.webview.postMessage({ command: type, content: content });
         }
@@ -1635,18 +1763,15 @@ ${this.pendingEdit.replacementCode}
                 
                 <div id="bottom-controls">
                     
-                    <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
-                        <button id="save-key-button">Save & Activate</button>
-                    </div>
+                    <!-- 4. Removed inline config panel -->
 
                     <div id="context-header">
                         <div id="context-file-controls">
                             
-                            <button id="add-context-file-button" title="Add file context (Paperclip Icon)">
+                            <button id="add-context-file-button" title="Add file context (File Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L22 10"/>
-                                    <path d="M19 11l-6.5 6.5a1.5 1.5 0 0 1-3-3L16 8"/>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
                                 </svg>
                             </button>
                             
@@ -1656,18 +1781,42 @@ ${this.pendingEdit.replacementCode}
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+                            
+                            <!-- API Key Management Toggle Button -->
+                            <button id="key-management-toggle" title="Manage API Keys">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
+                                </svg>
+                            </button>
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
                             <ul id="context-file-list">
                                 <!-- Files loaded here -->
                             </ul>
-                            <span id="context-placeholder">Describe what to build next</span>
+                            <span id="active-file-indicator"></span> <!-- 1. New indicator for active file -->
                         </div>
                     </div>
-                
+                    
+                    <!-- NEW: Key Management Panel -->
+                    <div id="key-management-panel" style="display: none;">
+                        <div class="panel-section">
+                            <h4>Active Key Selection</h4>
+                            <ul id="key-list">
+                                <!-- Key buttons loaded here -->
+                            </ul>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Add/Update API Key</h4>
+                            <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required>
+                            <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required>
+                            <button id="key-save-button">Save & Set Active</button>
+                        </div>
+                    </div>
+
                     <div id="action-bar">
-                        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="1"></textarea>
+                        <textarea id="prompt-input" placeholder="Describe what to build next" rows="1"></textarea> <!-- 2. Updated placeholder -->
                         <button id="send-button" title="Send Prompt (Arrow Icon)">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -1707,7 +1856,10 @@ ${this.pendingEdit.replacementCode}
 export function activate(context: vscode.ExtensionContext) {
     console.log('Gemini Local Coder extension is now active!');
 
-    const provider = new GeminiCoderProvider(context.extensionUri);
+    // Initialize Secret Storage Manager
+    const secretManager = new SecretStorageManager(context.secrets);
+
+    const provider = new GeminiCoderProvider(context.extensionUri, secretManager); // Pass manager
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
     );
@@ -1719,13 +1871,8 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
     
-    // R5: Register Edit Commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('gemini-local-coder.acceptEdit', () => provider.acceptEdit()),
-        vscode.commands.registerCommand('gemini-local-coder.rejectEdit', () => provider.rejectEdit())
-    );
-
-    const inlineProvider = new GeminiInlineCompletionProvider();
+    // Pass manager to inline provider
+    const inlineProvider = new GeminiInlineCompletionProvider(secretManager);
     const selector: vscode.DocumentSelector = { language: '*', scheme: 'file' };
 
     context.subscriptions.push(
@@ -1746,6 +1893,7 @@ import * as vscode from 'vscode';
 import { GoogleGenAI } from '@google/genai';
 import { DebounceController } from './DebounceController';
 import { ConfigurationManager } from './ConfigurationManager';
+import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
 
 const MAX_CONTEXT_CHARS = 200000; // Limit context size
 
@@ -1757,13 +1905,19 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
         ConfigurationManager.getDebounceDelay()
     );
 
-    constructor() {
+    constructor(private readonly secretManager: SecretStorageManager) { // NEW DEPENDENCY
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+        // Listen for configuration changes related to active key or debounce
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName') || e.affectsConfiguration('gemini.latency.debounceMs')) {
+                 this.initializeApiAgent();
+            }
+        });
     }
 
-    private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+    private async initializeApiAgent() { // Now async
+        // Use SecretStorageManager to get the currently active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");
@@ -1882,6 +2036,145 @@ TASK: Based on the context and the '###CURSOR###' position, complete the code pr
 
 --- END FILE: src\InlineCompletionProvider.ts ---
 
+--- START FILE: src\SecretStorageManager.ts ---
+
+// src/SecretStorageManager.ts
+import * as vscode from 'vscode';
+
+const SECRET_KEY_PREFIX = 'gemini.apikey.';
+
+export class SecretStorageManager {
+    private readonly secrets: vscode.SecretStorage;
+
+    constructor(secrets: vscode.SecretStorage) {
+        this.secrets = secrets;
+    }
+
+    private getKeyStorageId(name: string): string {
+        return SECRET_KEY_PREFIX + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+
+    /**
+     * Retrieves the list of all stored API key names.
+     */
+    public async getAllKeyNames(): Promise<string[]> {
+        const keys = await this.secrets.keys();
+        const names = [];
+        
+        // Due to VS Code Secret Storage implementation details, keys() returns internal IDs.
+        // We have to iterate and find which stored IDs belong to us, 
+        // and map them back if possible. For simplicity, we currently rely on external storage
+        // of key names or derive them, but here we iterate over all keys hoping VS Code
+        // eventually supports better key management indexing.
+        // For this implementation, we rely on the provider re-requesting the active name
+        // and the list of names derived from stored key IDs.
+        
+        // NOTE: In a real-world scenario, storing a manifest of user-friendly names 
+        // linked to cryptic SecretStorage IDs is often necessary. 
+        // For this plaintext implementation, we will fetch keys and assume the provider 
+        // will keep track of user-friendly names vs internal SecretStorage names. 
+        // We will prioritize Configuration for active name management.
+        
+        const configKeys = await this.getStoredConfigKeyNames();
+        return configKeys.filter(name => name.trim() !== '');
+    }
+
+    // Since VSCode Secret Storage keys() method is implementation-dependent, 
+    // we use a workaround by assuming key names are stored in a configuration entry 
+    // that we manage, or we query keys iteratively.
+    // Given the constraints, let's simplify and rely on the extension host 
+    // managing the map of names if necessary, but keep CRUD simple by prefixing.
+    
+    // For now, we manually manage a list of names if we can't iterate stored keys reliably.
+    // To keep it simple, we store a list of names in a public setting:
+    private async getStoredConfigKeyNames(): Promise<string[]> {
+        const config = vscode.workspace.getConfiguration('gemini');
+        const storedNames = config.get<string[]>('storedApiKeys') || [];
+        return storedNames;
+    }
+
+    private async setStoredConfigKeyNames(names: string[]): Promise<void> {
+         await vscode.workspace.getConfiguration('gemini').update(
+            'storedApiKeys', 
+            Array.from(new Set(names)), // Ensure uniqueness
+            vscode.ConfigurationTarget.Global
+        );
+    }
+    
+    /**
+     * Retrieves the API key for the given name.
+     */
+    public async getApiKey(name: string): Promise<string | undefined> {
+        if (!name) return undefined;
+        return this.secrets.get(this.getKeyStorageId(name));
+    }
+
+    /**
+     * Saves a new API key or updates an existing one.
+     */
+    public async saveApiKey(name: string, key: string): Promise<void> {
+        if (!name || !key) throw new Error("Name and key required.");
+        const internalId = this.getKeyStorageId(name);
+        await this.secrets.store(internalId, key.trim());
+        
+        // Update list of configured names
+        const names = await this.getStoredConfigKeyNames();
+        if (!names.includes(name)) {
+            names.push(name);
+            await this.setStoredConfigKeyNames(names);
+        }
+    }
+
+    /**
+     * Deletes a stored API key.
+     */
+    public async deleteApiKey(name: string): Promise<void> {
+        if (!name) return;
+        const internalId = this.getKeyStorageId(name);
+        await this.secrets.delete(internalId);
+        
+        // Update list of configured names
+        const names = await this.getStoredConfigKeyNames();
+        const updatedNames = names.filter(n => n !== name);
+        await this.setStoredConfigKeyNames(updatedNames);
+    }
+    
+    // --- Active Key Management (Uses VS Code Configuration) ---
+
+    /**
+     * Gets the name of the currently active key from configuration.
+     */
+    public getActiveKeyName(): string | undefined {
+        const config = vscode.workspace.getConfiguration('gemini');
+        const activeName = config.get<string>('activeApiKeyName');
+        return activeName?.trim() || undefined;
+    }
+    
+    /**
+     * Sets the currently active key name in configuration.
+     */
+    public async setActiveKeyName(name: string): Promise<void> {
+        await vscode.workspace.getConfiguration('gemini').update(
+            'activeApiKeyName', 
+            name, 
+            vscode.ConfigurationTarget.Global
+        );
+    }
+
+    /**
+     * Retrieves the actual API key content for the currently active key.
+     */
+    public async getActiveApiKey(): Promise<string | undefined> {
+        const activeName = this.getActiveKeyName();
+        if (!activeName) {
+             return undefined;
+        }
+        return this.getApiKey(activeName);
+    }
+}
+
+--- END FILE: src\SecretStorageManager.ts ---
+
 --- START FILE: src\webview\index.html ---
 
 <!DOCTYPE html>
@@ -1919,6 +2212,8 @@ TASK: Based on the context and the '###CURSOR###' position, complete the code pr
 
 // src/webview/main.js
 // This script runs in the webview context.
+// src/webview/main.js
+// This script runs in the webview context.
 const vscode = acquireVsCodeApi();
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1927,26 +2222,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendButton = document.getElementById('send-button');
     const newChatButton = document.getElementById('new-chat-button');
     const keyStatusIndicator = document.getElementById('key-status-indicator');
-    const configPanel = document.getElementById('config-panel');
-    const apiKeyInput = document.getElementById('api-key-input');
-    const saveKeyButton = document.getElementById('save-key-button');
+    
+    // Key Management Elements (R6)
+    const keyManagementToggle = document.getElementById('key-management-toggle');
+    const keyManagementPanel = document.getElementById('key-management-panel');
+    const keyNameInput = document.getElementById('key-name-input');
+    const keyValueInput = document.getElementById('key-value-input');
+    const keySaveButton = document.getElementById('key-save-button');
+    const keyList = document.getElementById('key-list');
     
     // UI ELEMENTS FOR F3
     const contextHeader = document.getElementById('context-header');
     const contextFileList = document.getElementById('context-file-list');
-    const contextPlaceholder = document.getElementById('context-placeholder');
+    // 1. New active file indicator element
+    const activeFileIndicator = document.getElementById('active-file-indicator'); 
     const addContextFileButton = document.getElementById('add-context-file-button');
     
     // R4: Command Palette Elements
     const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
 
+    const CHAT_STORAGE_KEY = 'geminiLocalCoderChatHistory'; // 3. Storage key
     const initialWelcomeMessage = `
         <div class="message system">
             Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
         </div>`;
 
-    chatHistory.innerHTML = initialWelcomeMessage; 
+    // 3. Load chat history on startup
+    loadChatHistory();
+
+    function loadChatHistory() {
+        const history = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (history) {
+            try {
+                // Ensure history is parsed, then inserted as innerHTML
+                chatHistory.innerHTML = JSON.parse(history);
+            } catch {
+                chatHistory.innerHTML = initialWelcomeMessage;
+            }
+        } else {
+            chatHistory.innerHTML = initialWelcomeMessage; 
+        }
+    }
+    
+    function saveChatHistory() {
+        // 3. Save chat history to local storage
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory.innerHTML));
+    }
 
     // Utility to post a message to the extension host (extension.ts)
     const postMessage = (command, payload = {}) => {
@@ -1958,16 +2280,50 @@ document.addEventListener('DOMContentLoaded', () => {
         postMessage('newChat');
     });
 
-    // --- F2: Inline API Key Configuration ---
-    saveKeyButton.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key) {
-            saveKeyButton.textContent = 'Saving...';
-            apiKeyInput.disabled = true;
-            saveKeyButton.disabled = true;
-            postMessage('saveKey', { key: key });
+    // R6: Key Management Toggle
+    keyManagementToggle.addEventListener('click', () => {
+        const isHidden = keyManagementPanel.style.display === 'none' || !keyManagementPanel.style.display;
+        if (isHidden) {
+            // Request fresh list whenever the panel is opened
+            postMessage('requestKeyManagementDetails');
+        }
+        keyManagementPanel.style.display = isHidden ? 'flex' : 'none';
+        
+        // Hide palette if active
+        togglePalette(false);
+    });
+    
+    // R6: Key Save Handler
+    keySaveButton.addEventListener('click', () => {
+        const name = keyNameInput.value;
+        const key = keyValueInput.value;
+        
+        if (name && key) {
+            postMessage('saveNewApiKey', { name, key });
+            // Clear value field for security, keep name for easy editing
+            keyValueInput.value = '';
+        } else {
+            // Use the status bar for feedback instead of alert in final implementation
+            vscode.postMessage({ command: 'error', content: "API Key Name and Key value must not be empty." });
         }
     });
+    
+    // R6: Key List Actions (Select/Delete)
+    keyList.addEventListener('click', (e) => {
+        const target = e.target;
+        // Traverse up to find the nearest key item
+        const keyItem = target.closest('.key-item'); 
+        const name = keyItem?.getAttribute('data-name');
+        
+        if (!name) return;
+        
+        if (target.classList.contains('key-select-button')) {
+             postMessage('selectApiKey', { name });
+        } else if (target.classList.contains('key-delete-button')) {
+            postMessage('requestDeleteConfirmation', { name });
+        }
+    });
+
 
     // --- F3: Contextual File Inclusion ---
     addContextFileButton.addEventListener('click', () => {
@@ -2042,48 +2398,105 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // R2 & R3: Enhanced formatting for Code Responses (Simplified)
+    // R2 & R3: Enhanced formatting for Code Responses (Handling FIND/REPLACE blocks)
     function formatResponse(responseText) {
+        // Regex for FIND/REPLACE blocks. Assumes structure: --- FIND --- ```lang...``` --- REPLACE --- ```lang...```
+        const findReplaceRegex = /---\s*FIND\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```\s*---\s*REPLACE\s*---\s*```(?:\w+)?\n([\s\S]*?)\n```/gi;
         
-        // Treat contextual edit markers as plain text if they reach the webview, 
-        // as successful in-editor edits are intercepted in the extension host.
-        const plainText = responseText;
-
-        // Existing logic for standard markdown code blocks
-        const regex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
-        let match;
-        let lastIndex = 0;
+        // Regex for standard standalone markdown blocks
+        const standardCodeRegex = /```(?:\w+)?\n([\s\S]*?)\n```/g;
+        
         let formattedHtml = '';
+        let lastIndex = 0;
         let codeFound = false;
-
-        while ((match = regex.exec(plainText)) !== null) {
-            codeFound = true;
-            const textBefore = plainText.substring(lastIndex, match.index).trim();
-            const codeContent = match[1];
-
-            if (textBefore) {
-                formattedHtml += `<p>${textBefore}</p>`;
+        
+        const responseSegments = [];
+        
+        // 1. Extract and process FIND/REPLACE blocks first
+        let match;
+        while ((match = findReplaceRegex.exec(responseText)) !== null) {
+            // Push text content before this block
+            if (match.index > lastIndex) {
+                responseSegments.push({ type: 'text', content: responseText.substring(lastIndex, match.index) });
             }
-
-            formattedHtml += `
-                <div class="code-block">
-                    <pre>${escapeHtml(codeContent)}</pre>
-                    <div class="code-actions">
-                        <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
-                        <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
-                    </div>
-                </div>
-            `;
+            
+            const findContent = match[1].trim();
+            const replaceContent = match[2].trim();
+            
+            responseSegments.push({ type: 'findReplace', find: findContent, replace: replaceContent });
             lastIndex = match.index + match[0].length;
         }
-
-        const textAfter = plainText.substring(lastIndex).trim();
-        if (textAfter) {
-            formattedHtml += `<p>${textAfter}</p>`;
+        
+        // Push remaining text content
+        if (lastIndex < responseText.length) {
+            responseSegments.push({ type: 'text', content: responseText.substring(lastIndex) });
         }
         
-        if (!codeFound && plainText.trim()) {
-            formattedHtml = `<p>${plainText.trim()}</p>`;
+        // 2. Process segments and render
+        for (const segment of responseSegments) {
+            if (segment.type === 'findReplace') {
+                codeFound = true;
+                formattedHtml += `
+                    <div class="code-diff-block">
+                        <div class="diff-header code-header">
+                            <span>--- FIND ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.find)}" title="Copy FIND block">Copy</button>
+                        </div>
+                        <div class="find-block">
+                            <pre>${escapeHtml(segment.find)}</pre>
+                        </div>
+                        <div class="diff-header code-header">
+                            <span>--- REPLACE ---</span>
+                            <button class="copy-button" data-code="${escapeHtml(segment.replace)}" title="Copy REPLACE block">Copy</button>
+                        </div>
+                        <div class="replace-block">
+                            <pre>${escapeHtml(segment.replace)}</pre>
+                            <div class="code-actions">
+                                <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (segment.type === 'text') {
+                let text = segment.content;
+                let standardMatch;
+                let textLastIndex = 0;
+                
+                // 3. Look for standard code blocks within the remaining text segments
+                while ((standardMatch = standardCodeRegex.exec(text)) !== null) {
+                    codeFound = true;
+                    const textBefore = text.substring(textLastIndex, standardMatch.index).trim();
+                    const codeContent = standardMatch[1];
+                    
+                    if (textBefore) {
+                         formattedHtml += `<p>${textBefore}</p>`;
+                    }
+                    
+                    formattedHtml += `
+                        <div class="code-block">
+                            <div class="code-header standard-header">
+                                <button class="copy-button" data-code="${escapeHtml(codeContent)}" title="Copy code block">Copy</button>
+                            </div>
+                            <pre>${escapeHtml(codeContent)}</pre>
+                            <div class="code-actions">
+                                <button class="action-insert" data-code="${escapeHtml(codeContent)}">Insert at Cursor</button>
+                                <button class="action-replace" data-code="${escapeHtml(codeContent)}">Replace Selection</button>
+                            </div>
+                        </div>
+                    `;
+                    textLastIndex = standardMatch.index + standardMatch[0].length;
+                }
+                
+                const textAfter = text.substring(textLastIndex).trim();
+                if (textAfter) {
+                    formattedHtml += `<p>${textAfter}</p>`;
+                }
+            }
+        }
+        
+        if (!codeFound && responseText.trim()) {
+            // Handle plain text response if no blocks were found
+            formattedHtml = `<p>${responseText.trim()}</p>`;
         }
         
         return formattedHtml;
@@ -2094,7 +2507,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const fragment = document.createDocumentFragment();
         
         if (files.length > 0) {
-            contextPlaceholder.style.display = 'none';
             files.forEach(uriPath => {
                 const fileName = uriPath.split(/[\/\\]/).pop(); // Extract file name
                 const listItem = document.createElement('li');
@@ -2110,12 +2522,81 @@ document.addEventListener('DOMContentLoaded', () => {
             contextFileList.appendChild(fragment); // Append all at once
         } else {
             contextFileList.innerHTML = '';
-            contextPlaceholder.style.display = 'block';
         }
+    }
+    
+    // R6: New function to handle key list rendering
+    function updateKeyManagementDetails(keys, activeName) {
+        keyList.innerHTML = ''; // Clear existing
+        
+        if (keys.length === 0) {
+            const listItem = document.createElement('li');
+            listItem.textContent = 'No keys stored.';
+            listItem.classList.add('key-item');
+            keyList.appendChild(listItem);
+            return;
+        }
+
+        keys.forEach(key => {
+            const listItem = document.createElement('li');
+            listItem.classList.add('key-item');
+            if (key.isActive) {
+                listItem.classList.add('active');
+            }
+            listItem.setAttribute('data-name', key.name);
+            
+            listItem.innerHTML = `
+                <span class="key-name" title="${key.name}">${key.name}</span>
+                <div class="key-actions">
+                    ${!key.isActive ? `<button class="key-select-button">Set Active</button>` : `<span class="active-badge">Active</span>`}
+                    <button class="key-delete-button" title="Delete Key">&times;</button>
+                </div>
+            `;
+            keyList.appendChild(listItem);
+        });
+        
+        // Update key status indicator text based on active key availability
+        keyManagementToggle.title = activeName ? `Manage API Keys (Active: ${activeName})` : `Manage API Keys (No Active Key)`;
+        
+        // Pre-fill name field if we are editing (though actual editing requires key input)
+        keyNameInput.value = '';
+    }
+    
+    // 1. Update the active file indicator display
+    function updateActiveFileIndicator(activeFile) {
+        if (activeFile) {
+            activeFileIndicator.textContent = `Active: ${activeFile}`;
+            activeFileIndicator.style.display = 'inline-block';
+        } else {
+            activeFileIndicator.style.display = 'none';
+        }
+    }
+
+    function attachCopyListeners() {
+        document.querySelectorAll('.copy-button').forEach(button => {
+            button.onclick = (e) => {
+                const code = e.currentTarget.getAttribute('data-code');
+                if (code) {
+                    navigator.clipboard.writeText(code).then(() => {
+                        const originalText = button.innerHTML;
+                        button.innerHTML = 'Copied!';
+                        // Reset text after 2 seconds
+                        setTimeout(() => {
+                            button.innerHTML = originalText;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        button.innerHTML = 'Error';
+                    });
+                }
+            };
+        });
     }
 
     // R3: Attach listeners for code action buttons (standard blocks)
     function attachCodeActionListeners() {
+        attachCopyListeners(); // Attach copy listeners whenever code actions are attached
+
         document.querySelectorAll('.action-insert').forEach(button => {
             button.onclick = (e) => {
                 const code = e.currentTarget.getAttribute('data-code');
@@ -2131,7 +2612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Note: Contextual edit action listeners removed as in-editor edits are now handled natively via commands.
+
 
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
@@ -2148,31 +2629,36 @@ document.addEventListener('DOMContentLoaded', () => {
             promptInput.disabled = false;
             sendButton.disabled = false;
             promptInput.focus();
+            // 3. Save state after response
+            saveChatHistory();
         }
 
         switch (message.command) {
             case 'updateStatus': 
-                saveKeyButton.textContent = 'Save & Activate';
-                apiKeyInput.disabled = false;
-                saveKeyButton.disabled = false;
-
+                // 1. Update Active File Indicator
+                updateActiveFileIndicator(message.activeFile);
+                
+                // 4. Handle Key Status
                 if (message.keyStatus) {
                     keyStatusIndicator.classList.add('active');
-                    keyStatusIndicator.title = 'API Key Status: Active';
-                    configPanel.classList.add('hidden');
-                    contextHeader.classList.remove('hidden'); 
+                    keyStatusIndicator.title = `API Key Status: Active (${message.activeKeyName || 'Default'})`;
+                    contextHeader.classList.remove('key-missing'); 
                 } else {
                     keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid';
-                    configPanel.classList.remove('hidden');
-                    contextHeader.classList.add('hidden'); 
-                    chatHistory.innerHTML = ''; // Clear chat history when key is missing
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Click manage button to configure.';
+                    contextHeader.classList.add('key-missing'); 
                 }
                 updateContextFileList(message.contextFiles || []);
                 break;
             
+            case 'keyManagementDetails': // R6: Handle key list update
+                updateKeyManagementDetails(message.keys, message.activeName);
+                break;
+            
             case 'newChatConfirm':
                 chatHistory.innerHTML = initialWelcomeMessage;
+                // 3. Clear chat history from storage
+                localStorage.removeItem(CHAT_STORAGE_KEY);
                 break;
             
             case 'openPalette':
@@ -2239,8 +2725,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Manipulation Helpers
     function appendMessage(type, content, isText = true) {
         const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message', type);
-        
+        // Handle custom styling for API key success notification
+        if (type === 'success') {
+             messageDiv.classList.add('message', 'system');
+             messageDiv.classList.add('success');
+        } else {
+            messageDiv.classList.add('message', type);
+        }
+
         if (isText) {
             messageDiv.textContent = content;
         } else {
@@ -2249,6 +2741,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         chatHistory.appendChild(messageDiv);
         chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        // 3. Save chat history immediately after appending a user/assistant message
+        if (type === 'user' || type === 'assistant') {
+             saveChatHistory();
+        }
     }
     
     function escapeHtml(unsafe) {
@@ -2305,7 +2802,17 @@ body {
     background-color: var(--vscode-editor-background); 
     border: 1px solid var(--vscode-activityBar-border); /* Subtle border for separation */
     text-align: left;
+    white-space: normal; /* Allow normal text flow outside code blocks */
+}
+
+/* Ensure paragraph content inside assistant message wraps */
+.message.assistant p {
+    margin: 0 0 10px 0;
     white-space: pre-wrap;
+    word-break: break-word;
+}
+.message.assistant p:last-child {
+    margin-bottom: 0;
 }
 
 .message.error {
@@ -2313,18 +2820,68 @@ body {
     color: var(--vscode-editor-background);
 }
 
+.message.system.success {
+    background-color: var(--vscode-statusBarItem-prominentBackground); /* Use green color */
+    color: var(--vscode-statusBarItem-prominentForeground);
+    font-weight: 500;
+}
+
 .message.loading {
     font-style: italic;
     color: var(--vscode-editorInfo-foreground);
 }
 
+/* --- Code Block Styling (Standard Snippet) --- */
 .code-block {
     margin: 10px 0;
-    background-color: var(--vscode-widget-border); /* Slightly different from background */
-    padding: 10px;
+    background-color: var(--vscode-widget-border);
     border-radius: 4px;
+    overflow: hidden; /* Contains the header */
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: var(--vscode-editor-font-size, 13px);
+}
+/* Pre tag within standard code block needs padding */
+.code-block pre {
+    padding: 10px;
     overflow-x: auto;
-    font-family: monospace;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 10px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    background-color: var(--vscode-sideBarSectionHeader-background);
+    color: var(--vscode-sideBarSectionHeader-foreground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+}
+
+.standard-header {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    justify-content: flex-end; /* Only show copy button */
+}
+
+.copy-button {
+    background-color: var(--vscode-activityBarBadge-background);
+    color: var(--vscode-activityBarBadge-foreground);
+    border: none;
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+}
+.copy-button:hover {
+    filter: brightness(1.2);
 }
 
 .code-actions {
@@ -2341,10 +2898,64 @@ body {
     border: none;
     border-radius: 3px;
     font-size: 11px;
+    white-space: nowrap; /* Prevent button labels from wrapping */
+    transition: background-color 0.2s;
 }
 
 .code-actions button:hover {
     background-color: var(--vscode-button-hoverBackground);
+}
+
+
+/* --- FIND/REPLACE Specific Styling --- */
+.code-diff-block {
+    margin: 15px 0;
+    border: 1px solid var(--vscode-editorGroup-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--vscode-editor-background);
+}
+
+.diff-header {
+    background-color: var(--vscode-sideBarSectionHeader-background);
+    color: var(--vscode-sideBarSectionHeader-foreground);
+    border-top: 1px solid var(--vscode-editorGroup-border);
+    border-bottom: none; /* Let the next block handle separation */
+}
+.diff-header:first-child {
+    border-top: none;
+}
+
+.find-block, .replace-block {
+    padding: 0 10px;
+    background-color: var(--vscode-editor-background);
+}
+
+.find-block {
+    /* Subtle background for code being removed */
+    background-color: var(--vscode-diffEditor-removedTextBackground); 
+}
+
+.replace-block {
+    /* Subtle background for code being added */
+    background-color: var(--vscode-diffEditor-insertedTextBackground); 
+}
+
+.find-block pre, .replace-block pre {
+    /* Reset padding/margins for PRE tags inside blocks */
+    margin: 10px 0; 
+    padding: 0;
+    white-space: pre-wrap; /* Ensure text wraps */
+    word-break: break-all;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: var(--vscode-editor-font-size, 13px);
+    overflow-x: auto;
+}
+
+.replace-block .code-actions {
+    margin-top: 0; 
+    padding-bottom: 10px;
+    justify-content: flex-end; /* Align replacement button to the right */
 }
 
 
@@ -2359,47 +2970,41 @@ body {
     gap: 5px;
 }
 
-/* --- F2: Configuration Panel (Inline Key Setup) --- */
-#config-panel {
-    display: flex;
-    gap: 8px;
-    padding: 8px;
-    border-radius: 4px;
-    background-color: var(--vscode-editorWidget-background);
-    border: 1px solid var(--vscode-editorWidget-border);
-}
-
-#api-key-input {
-    flex-grow: 1;
-    padding: 0 8px;
-    height: 30px;
-    border: 1px solid var(--vscode-input-border);
-    background-color: var(--vscode-inputBackground);
-    color: var(--vscode-inputForeground);
-    border-radius: 3px;
-}
-#save-key-button {
-    white-space: nowrap;
-}
-
-
 /* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
 #context-header {
     display: flex;
-    align-items: center;
+    flex-direction: column; /* 5. Default to vertical stacking for narrow views */
+    align-items: flex-start;
     background-color: var(--vscode-inputBackground);
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
-    min-height: 38px;
     padding: 5px 8px;
+    gap: 5px;
 }
+/* 4. Highlight context header when key is missing to prompt action */
+#context-header.key-missing {
+    border-color: var(--vscode-statusBarItem-errorBackground);
+}
+
 
 #context-file-controls {
     display: flex;
     gap: 5px;
-    padding-right: 10px;
-    /* Removed redundant border-right to minimize visual noise, relying on spacing */
     align-items: center;
+    /* Ensure controls stay on one line */
+    flex-shrink: 0;
+    width: 100%; /* Take full width when stacked */
+    justify-content: flex-start;
+}
+/* 5. Force controls and summary onto one line on wider screens */
+@media (min-width: 300px) {
+    #context-header {
+        flex-direction: row;
+        align-items: center;
+    }
+    #context-file-controls {
+        width: auto;
+    }
 }
 
 #key-status-indicator {
@@ -2416,16 +3021,25 @@ body {
 /* --- Context Summary Area --- */
 #context-summary {
     flex-grow: 1;
-    padding-left: 10px;
+    /* 5. Ensure summary wraps below controls on narrow screens */
+    padding-left: 0; 
     display: flex;
+    flex-wrap: wrap; /* 5. Allow list items and indicators to wrap */
     align-items: center;
     min-height: 28px;
+    gap: 5px; /* Gap between file list and active indicator */
 }
 
-#context-placeholder {
-    font-style: italic;
-    color: var(--vscode-list-deemphasizedForeground);
-    font-size: 13px;
+/* 1. Styling for the active file indicator */
+#active-file-indicator {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--vscode-list-activeSelectionForeground);
+    background-color: var(--vscode-list-activeSelectionBackground);
+    padding: 3px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: none; /* Hidden by default, shown via JS */
 }
 
 #context-file-list {
@@ -2462,12 +3076,122 @@ body {
     opacity: 1;
 }
 
+/* --- Key Management Panel (R6) --- */
+#key-management-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+}
+
+.panel-section h4 {
+    margin: 0 0 5px 0;
+    font-size: 13px;
+    color: var(--vscode-sideBarTitle-foreground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+    padding-bottom: 3px;
+}
+
+#key-list {
+    list-style: none;
+    padding: 0;
+    margin: 5px 0;
+}
+
+.key-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--vscode-editorGroup-border);
+}
+.key-item:last-child {
+    border-bottom: none;
+}
+.key-item.active {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    padding: 6px;
+    margin: 0 -6px;
+    border-radius: 4px;
+    border-bottom: none;
+}
+
+.key-name {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.key-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.active-badge {
+    background-color: var(--vscode-statusBarItem-prominentBackground);
+    color: var(--vscode-statusBarItem-prominentForeground);
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.key-select-button {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: none;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+}
+.key-select-button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+    color: var(--vscode-button-foreground);
+}
+
+.key-delete-button {
+    background: none;
+    border: none;
+    color: var(--vscode-errorForeground);
+    cursor: pointer;
+    padding: 0 3px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+#key-name-input, #key-value-input {
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-inputForeground);
+}
+#key-save-button {
+    width: 100%;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+#key-save-button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+
 /* --- Action Bar (Prompt Input Area - Mimicking Copilot) --- */
 #action-bar {
     display: flex;
     align-items: flex-end; 
-    background-color: var(--vscode-inputBackground); /* Inherits input background from #context-header */
-    border: none; /* Rely on border from #bottom-controls parent */
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border); /* Added border to make it look like a cohesive input area */
     border-radius: 4px;
     padding: 5px;
 }
@@ -2488,9 +3212,10 @@ body {
     outline: none;
 }
 
-/* --- Icon Buttons (New Chat, Attachment) --- */
+/* --- Icon Buttons (New Chat, Attachment, Settings) --- */
 #new-chat-button, 
-#add-context-file-button {
+#add-context-file-button,
+#settings-button { /* 4. Added settings button */
     background: none;
     border: none;
     color: var(--vscode-foreground);
@@ -2504,8 +3229,9 @@ body {
     justify-content: center;
 }
 
-#new-chat-button:hover,
-#add-context-file-button:hover {
+#new-chat-button:hover, 
+#add-context-file-button:hover,
+#settings-button:hover { /* 4. Added settings button */
     opacity: 1;
 }
 

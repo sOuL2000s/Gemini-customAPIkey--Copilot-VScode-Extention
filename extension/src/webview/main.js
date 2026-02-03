@@ -1,5 +1,7 @@
 // src/webview/main.js
 // This script runs in the webview context.
+// src/webview/main.js
+// This script runs in the webview context.
 const vscode = acquireVsCodeApi();
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -8,26 +10,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendButton = document.getElementById('send-button');
     const newChatButton = document.getElementById('new-chat-button');
     const keyStatusIndicator = document.getElementById('key-status-indicator');
-    const configPanel = document.getElementById('config-panel');
-    const apiKeyInput = document.getElementById('api-key-input');
-    const saveKeyButton = document.getElementById('save-key-button');
+    
+    // Key Management Elements (R6)
+    const keyManagementToggle = document.getElementById('key-management-toggle');
+    const keyManagementPanel = document.getElementById('key-management-panel');
+    const keyNameInput = document.getElementById('key-name-input');
+    const keyValueInput = document.getElementById('key-value-input');
+    const keySaveButton = document.getElementById('key-save-button');
+    const keyList = document.getElementById('key-list');
     
     // UI ELEMENTS FOR F3
     const contextHeader = document.getElementById('context-header');
     const contextFileList = document.getElementById('context-file-list');
-    const contextPlaceholder = document.getElementById('context-placeholder');
+    // 1. New active file indicator element
+    const activeFileIndicator = document.getElementById('active-file-indicator'); 
     const addContextFileButton = document.getElementById('add-context-file-button');
     
     // R4: Command Palette Elements
     const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
 
+    const CHAT_STORAGE_KEY = 'geminiLocalCoderChatHistory'; // 3. Storage key
     const initialWelcomeMessage = `
         <div class="message system">
             Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
         </div>`;
 
-    chatHistory.innerHTML = initialWelcomeMessage; 
+    // 3. Load chat history on startup
+    loadChatHistory();
+
+    function loadChatHistory() {
+        const history = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (history) {
+            try {
+                // Ensure history is parsed, then inserted as innerHTML
+                chatHistory.innerHTML = JSON.parse(history);
+            } catch {
+                chatHistory.innerHTML = initialWelcomeMessage;
+            }
+        } else {
+            chatHistory.innerHTML = initialWelcomeMessage; 
+        }
+    }
+    
+    function saveChatHistory() {
+        // 3. Save chat history to local storage
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory.innerHTML));
+    }
 
     // Utility to post a message to the extension host (extension.ts)
     const postMessage = (command, payload = {}) => {
@@ -39,16 +68,50 @@ document.addEventListener('DOMContentLoaded', () => {
         postMessage('newChat');
     });
 
-    // --- F2: Inline API Key Configuration ---
-    saveKeyButton.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key) {
-            saveKeyButton.textContent = 'Saving...';
-            apiKeyInput.disabled = true;
-            saveKeyButton.disabled = true;
-            postMessage('saveKey', { key: key });
+    // R6: Key Management Toggle
+    keyManagementToggle.addEventListener('click', () => {
+        const isHidden = keyManagementPanel.style.display === 'none' || !keyManagementPanel.style.display;
+        if (isHidden) {
+            // Request fresh list whenever the panel is opened
+            postMessage('requestKeyManagementDetails');
+        }
+        keyManagementPanel.style.display = isHidden ? 'flex' : 'none';
+        
+        // Hide palette if active
+        togglePalette(false);
+    });
+    
+    // R6: Key Save Handler
+    keySaveButton.addEventListener('click', () => {
+        const name = keyNameInput.value;
+        const key = keyValueInput.value;
+        
+        if (name && key) {
+            postMessage('saveNewApiKey', { name, key });
+            // Clear value field for security, keep name for easy editing
+            keyValueInput.value = '';
+        } else {
+            // Use the status bar for feedback instead of alert in final implementation
+            vscode.postMessage({ command: 'error', content: "API Key Name and Key value must not be empty." });
         }
     });
+    
+    // R6: Key List Actions (Select/Delete)
+    keyList.addEventListener('click', (e) => {
+        const target = e.target;
+        // Traverse up to find the nearest key item
+        const keyItem = target.closest('.key-item'); 
+        const name = keyItem?.getAttribute('data-name');
+        
+        if (!name) return;
+        
+        if (target.classList.contains('key-select-button')) {
+             postMessage('selectApiKey', { name });
+        } else if (target.classList.contains('key-delete-button')) {
+            postMessage('requestDeleteConfirmation', { name });
+        }
+    });
+
 
     // --- F3: Contextual File Inclusion ---
     addContextFileButton.addEventListener('click', () => {
@@ -232,7 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const fragment = document.createDocumentFragment();
         
         if (files.length > 0) {
-            contextPlaceholder.style.display = 'none';
             files.forEach(uriPath => {
                 const fileName = uriPath.split(/[\/\\]/).pop(); // Extract file name
                 const listItem = document.createElement('li');
@@ -248,7 +310,53 @@ document.addEventListener('DOMContentLoaded', () => {
             contextFileList.appendChild(fragment); // Append all at once
         } else {
             contextFileList.innerHTML = '';
-            contextPlaceholder.style.display = 'block';
+        }
+    }
+    
+    // R6: New function to handle key list rendering
+    function updateKeyManagementDetails(keys, activeName) {
+        keyList.innerHTML = ''; // Clear existing
+        
+        if (keys.length === 0) {
+            const listItem = document.createElement('li');
+            listItem.textContent = 'No keys stored.';
+            listItem.classList.add('key-item');
+            keyList.appendChild(listItem);
+            return;
+        }
+
+        keys.forEach(key => {
+            const listItem = document.createElement('li');
+            listItem.classList.add('key-item');
+            if (key.isActive) {
+                listItem.classList.add('active');
+            }
+            listItem.setAttribute('data-name', key.name);
+            
+            listItem.innerHTML = `
+                <span class="key-name" title="${key.name}">${key.name}</span>
+                <div class="key-actions">
+                    ${!key.isActive ? `<button class="key-select-button">Set Active</button>` : `<span class="active-badge">Active</span>`}
+                    <button class="key-delete-button" title="Delete Key">&times;</button>
+                </div>
+            `;
+            keyList.appendChild(listItem);
+        });
+        
+        // Update key status indicator text based on active key availability
+        keyManagementToggle.title = activeName ? `Manage API Keys (Active: ${activeName})` : `Manage API Keys (No Active Key)`;
+        
+        // Pre-fill name field if we are editing (though actual editing requires key input)
+        keyNameInput.value = '';
+    }
+    
+    // 1. Update the active file indicator display
+    function updateActiveFileIndicator(activeFile) {
+        if (activeFile) {
+            activeFileIndicator.textContent = `Active: ${activeFile}`;
+            activeFileIndicator.style.display = 'inline-block';
+        } else {
+            activeFileIndicator.style.display = 'none';
         }
     }
 
@@ -309,42 +417,36 @@ document.addEventListener('DOMContentLoaded', () => {
             promptInput.disabled = false;
             sendButton.disabled = false;
             promptInput.focus();
+            // 3. Save state after response
+            saveChatHistory();
         }
 
         switch (message.command) {
             case 'updateStatus': 
-                // Check if we just transitioned from inactive (hidden config) to active
-                const wasActive = keyStatusIndicator.classList.contains('active');
+                // 1. Update Active File Indicator
+                updateActiveFileIndicator(message.activeFile);
                 
-                saveKeyButton.textContent = 'Save & Activate';
-                apiKeyInput.disabled = false;
-                saveKeyButton.disabled = false;
-
+                // 4. Handle Key Status
                 if (message.keyStatus) {
                     keyStatusIndicator.classList.add('active');
-                    keyStatusIndicator.title = 'API Key Status: Active';
-                    configPanel.classList.add('hidden');
-                    contextHeader.classList.remove('hidden'); 
-                    
-                    if (!wasActive && chatHistory.children.length === 0) {
-                        // Display clear confirmation if key was just activated and chat was empty
-                        appendMessage('success', 'Gemini API Key successfully validated and activated.');
-                        // Reinitialize welcome message
-                        chatHistory.innerHTML += initialWelcomeMessage;
-                    }
-
+                    keyStatusIndicator.title = `API Key Status: Active (${message.activeKeyName || 'Default'})`;
+                    contextHeader.classList.remove('key-missing'); 
                 } else {
                     keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Please enter your key below.';
-                    configPanel.classList.remove('hidden');
-                    contextHeader.classList.add('hidden'); 
-                    chatHistory.innerHTML = ''; // Clear chat history when key is missing
+                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Click manage button to configure.';
+                    contextHeader.classList.add('key-missing'); 
                 }
                 updateContextFileList(message.contextFiles || []);
                 break;
             
+            case 'keyManagementDetails': // R6: Handle key list update
+                updateKeyManagementDetails(message.keys, message.activeName);
+                break;
+            
             case 'newChatConfirm':
                 chatHistory.innerHTML = initialWelcomeMessage;
+                // 3. Clear chat history from storage
+                localStorage.removeItem(CHAT_STORAGE_KEY);
                 break;
             
             case 'openPalette':
@@ -427,6 +529,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         chatHistory.appendChild(messageDiv);
         chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        // 3. Save chat history immediately after appending a user/assistant message
+        if (type === 'user' || type === 'assistant') {
+             saveChatHistory();
+        }
     }
     
     function escapeHtml(unsafe) {

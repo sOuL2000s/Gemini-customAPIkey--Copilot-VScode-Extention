@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { GoogleGenAI } from '@google/genai';
 import { DebounceController } from './DebounceController';
 import { ConfigurationManager } from './ConfigurationManager';
+import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
 
 const MAX_CONTEXT_CHARS = 200000; // Limit context size
 
@@ -14,13 +15,19 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
         ConfigurationManager.getDebounceDelay()
     );
 
-    constructor() {
+    constructor(private readonly secretManager: SecretStorageManager) { // NEW DEPENDENCY
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+        // Listen for configuration changes related to active key or debounce
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName') || e.affectsConfiguration('gemini.latency.debounceMs')) {
+                 this.initializeApiAgent();
+            }
+        });
     }
 
-    private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+    private async initializeApiAgent() { // Now async
+        // Use SecretStorageManager to get the currently active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
             console.log("Gemini API Agent initialized for inline suggestions.");

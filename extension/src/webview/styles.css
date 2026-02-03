@@ -206,52 +206,41 @@ body {
     gap: 5px;
 }
 
-/* --- F2: Configuration Panel (Inline Key Setup) --- */
-#config-panel {
-    display: flex;
-    flex-wrap: nowrap; /* Keep them inline unless screen is tiny */
-    align-items: center;
-    gap: 8px;
-    padding: 8px;
-    border-radius: 4px;
-    background-color: var(--vscode-editorWidget-background);
-    border: 1px solid var(--vscode-editorWidget-border);
-}
-
-#api-key-input {
-    flex-grow: 1;
-    min-width: 50px; /* Ensure minimum space */
-    padding: 0 8px;
-    height: 30px;
-    border: 1px solid var(--vscode-input-border);
-    background-color: var(--vscode-inputBackground);
-    color: var(--vscode-inputForeground);
-    border-radius: 3px;
-}
-#save-key-button {
-    white-space: nowrap;
-    flex-shrink: 0; /* Prevent button from shrinking */
-    min-height: 30px;
-}
-
-
 /* --- F3/F1: Context Header (The sleek bar above the prompt) --- */
 #context-header {
     display: flex;
-    align-items: center;
+    flex-direction: column; /* 5. Default to vertical stacking for narrow views */
+    align-items: flex-start;
     background-color: var(--vscode-inputBackground);
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
-    min-height: 38px;
     padding: 5px 8px;
+    gap: 5px;
 }
+/* 4. Highlight context header when key is missing to prompt action */
+#context-header.key-missing {
+    border-color: var(--vscode-statusBarItem-errorBackground);
+}
+
 
 #context-file-controls {
     display: flex;
     gap: 5px;
-    padding-right: 10px;
-    /* Removed redundant border-right to minimize visual noise, relying on spacing */
     align-items: center;
+    /* Ensure controls stay on one line */
+    flex-shrink: 0;
+    width: 100%; /* Take full width when stacked */
+    justify-content: flex-start;
+}
+/* 5. Force controls and summary onto one line on wider screens */
+@media (min-width: 300px) {
+    #context-header {
+        flex-direction: row;
+        align-items: center;
+    }
+    #context-file-controls {
+        width: auto;
+    }
 }
 
 #key-status-indicator {
@@ -268,16 +257,25 @@ body {
 /* --- Context Summary Area --- */
 #context-summary {
     flex-grow: 1;
-    padding-left: 10px;
+    /* 5. Ensure summary wraps below controls on narrow screens */
+    padding-left: 0; 
     display: flex;
+    flex-wrap: wrap; /* 5. Allow list items and indicators to wrap */
     align-items: center;
     min-height: 28px;
+    gap: 5px; /* Gap between file list and active indicator */
 }
 
-#context-placeholder {
-    font-style: italic;
-    color: var(--vscode-list-deemphasizedForeground);
-    font-size: 13px;
+/* 1. Styling for the active file indicator */
+#active-file-indicator {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--vscode-list-activeSelectionForeground);
+    background-color: var(--vscode-list-activeSelectionBackground);
+    padding: 3px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: none; /* Hidden by default, shown via JS */
 }
 
 #context-file-list {
@@ -314,12 +312,122 @@ body {
     opacity: 1;
 }
 
+/* --- Key Management Panel (R6) --- */
+#key-management-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+}
+
+.panel-section h4 {
+    margin: 0 0 5px 0;
+    font-size: 13px;
+    color: var(--vscode-sideBarTitle-foreground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+    padding-bottom: 3px;
+}
+
+#key-list {
+    list-style: none;
+    padding: 0;
+    margin: 5px 0;
+}
+
+.key-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--vscode-editorGroup-border);
+}
+.key-item:last-child {
+    border-bottom: none;
+}
+.key-item.active {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    padding: 6px;
+    margin: 0 -6px;
+    border-radius: 4px;
+    border-bottom: none;
+}
+
+.key-name {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.key-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.active-badge {
+    background-color: var(--vscode-statusBarItem-prominentBackground);
+    color: var(--vscode-statusBarItem-prominentForeground);
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.key-select-button {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: none;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+}
+.key-select-button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+    color: var(--vscode-button-foreground);
+}
+
+.key-delete-button {
+    background: none;
+    border: none;
+    color: var(--vscode-errorForeground);
+    cursor: pointer;
+    padding: 0 3px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+#key-name-input, #key-value-input {
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-inputForeground);
+}
+#key-save-button {
+    width: 100%;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+#key-save-button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+
 /* --- Action Bar (Prompt Input Area - Mimicking Copilot) --- */
 #action-bar {
     display: flex;
     align-items: flex-end; 
-    background-color: var(--vscode-inputBackground); /* Inherits input background from #context-header */
-    border: none; /* Rely on border from #bottom-controls parent */
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border); /* Added border to make it look like a cohesive input area */
     border-radius: 4px;
     padding: 5px;
 }
@@ -340,9 +448,10 @@ body {
     outline: none;
 }
 
-/* --- Icon Buttons (New Chat, Attachment) --- */
+/* --- Icon Buttons (New Chat, Attachment, Settings) --- */
 #new-chat-button, 
-#add-context-file-button {
+#add-context-file-button,
+#settings-button { /* 4. Added settings button */
     background: none;
     border: none;
     color: var(--vscode-foreground);
@@ -356,8 +465,9 @@ body {
     justify-content: center;
 }
 
-#new-chat-button:hover,
-#add-context-file-button:hover {
+#new-chat-button:hover, 
+#add-context-file-button:hover,
+#settings-button:hover { /* 4. Added settings button */
     opacity: 1;
 }
 

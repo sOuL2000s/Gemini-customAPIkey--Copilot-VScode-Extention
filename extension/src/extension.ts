@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GoogleGenAI } from '@google/genai';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
+import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
 
 // --- Configuration ---
 const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025"; 
@@ -30,14 +31,35 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
     private contextFiles: Map<string, string> = new Map(); 
+    private activeFileName: string | null = null; // 1. Track active file
     
-    constructor(private readonly _extensionUri: vscode.Uri) {
+    constructor(
+        private readonly _extensionUri: vscode.Uri,
+        private readonly secretManager: SecretStorageManager // NEW DEPENDENCY
+    ) {
+        this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
-        vscode.workspace.onDidChangeConfiguration(() => this.initializeApiAgent());
+
+        // Listen for configuration changes (specifically activeApiKeyName)
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('gemini.activeApiKeyName')) {
+                this.initializeApiAgent();
+            }
+        });
+        // 1. Listen for active editor changes
+        vscode.window.onDidChangeActiveTextEditor(() => this.updateActiveFile());
     }
     
-    private initializeApiAgent() {
-        const apiKey = ConfigurationManager.getApiKey();
+    // 1. New method to track and update the active file
+    private updateActiveFile() {
+        const editor = vscode.window.activeTextEditor;
+        this.activeFileName = editor ? editor.document.fileName.split(/[\/\\]/).pop() || null : null;
+        this.postViewStatus();
+    }
+    
+    private async initializeApiAgent() { // Now async
+        // Use the new manager to get the active key
+        const apiKey = await this.secretManager.getActiveApiKey();
         if (apiKey) {
             this.apiAgent = new GoogleGenAI({ apiKey });
         } else {
@@ -48,12 +70,32 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
     private postViewStatus() {
         if (this._view) {
+            const activeKeyName = this.secretManager.getActiveKeyName() || null;
+            
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
                 keyStatus: this.apiAgent !== null,
-                contextFiles: Array.from(this.contextFiles.keys())
+                contextFiles: Array.from(this.contextFiles.keys()),
+                activeFile: this.activeFileName, // 1. Pass active file name
+                activeKeyName: activeKeyName // NEW: Pass active key name
             });
+            // Also notify the webview immediately about key management details if panel is open
+            this.sendKeyManagementDetails();
         }
+    }
+    
+    // NEW: Handles fetching and sending all keys to the webview
+    private async sendKeyManagementDetails() {
+         const activeKeyName = this.secretManager.getActiveKeyName() || '';
+         const keyNames = await this.secretManager.getAllKeyNames();
+         
+         if (this._view) {
+             this._view.webview.postMessage({
+                 command: 'keyManagementDetails',
+                 keys: keyNames.map(name => ({ name, isActive: name === activeKeyName })),
+                 activeName: activeKeyName
+             });
+         }
     }
 
     public resolveWebviewView(
@@ -84,9 +126,33 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'newChat':
                     this.handleNewChatSession();
                     return;
+                // DEPRECATED SETTINGS COMMAND:
+                case 'openSettings': 
+                    // Direct users to configuration if they want to adjust debounce, 
+                    // but key management is handled internally.
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'gemini.latency.debounceMs');
+                    return;
                 case 'saveKey':
+                    // This command is now obsolete, kept for safety but unused.
                     this.handleSaveKey(message.key);
                     return;
+                // --- NEW Key Management Commands ---
+                case 'requestKeyManagementDetails':
+                    this.sendKeyManagementDetails();
+                    return;
+                case 'saveNewApiKey':
+                    this.handleSaveNewApiKey(message.name, message.key);
+                    return;
+                case 'requestDeleteConfirmation':
+                    this.handleDeleteConfirmation(message.name);
+                    return;
+                case 'deleteApiKey':
+                    this.handleDeleteApiKey(message.name);
+                    return;
+                case 'selectApiKey':
+                    this.handleSelectApiKey(message.name);
+                    return;
+                // --- END Key Management Commands ---
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
@@ -103,16 +169,89 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
 
-    private async handleSaveKey(key: string) {
-        const trimmedKey = key.trim();
-        if (trimmedKey) {
-            await vscode.workspace.getConfiguration('gemini').update(
-                'apiKey', 
-                trimmedKey, 
-                vscode.ConfigurationTarget.Global
-            );
+    // Obsolete: Replaced by multi-key management commands below.
+    private async handleSaveKey(key: string) { /* NOOP */ }
+    
+    // NEW: Handles displaying the native VS Code confirmation dialog
+    private async handleDeleteConfirmation(name: string) {
+        const response = await vscode.window.showWarningMessage(
+            `Are you sure you want to delete the API Key: '${name}'? This action cannot be undone.`,
+            { modal: true }, 
+            'Delete Key'
+        );
+
+        if (response === 'Delete Key') {
+            // If confirmed by the user in the native dialog, proceed to delete the key
+            this.handleDeleteApiKey(name); 
         }
     }
+
+    // --- New Key Management Handlers ---
+    private async handleSaveNewApiKey(name: string, key: string) {
+        name = name.trim();
+        key = key.trim();
+        if (!name || !key) {
+            this.sendMessageToWebview('error', 'API Key Name and Key value must not be empty.');
+            return;
+        }
+
+        try {
+            await this.secretManager.saveApiKey(name, key);
+            
+            // If saving a new key, make it active
+            if (this.secretManager.getActiveKeyName() !== name) {
+                 await this.secretManager.setActiveKeyName(name);
+            }
+             
+            this.sendMessageToWebview('success', `API Key '${name}' saved and set as active.`);
+            this.sendKeyManagementDetails(); // Update panel view
+            this.initializeApiAgent();       // Refresh API agent connection
+        } catch (e) {
+            console.error("Failed to save API key:", e);
+            this.sendMessageToWebview('error', `Failed to save API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    
+    private async handleDeleteApiKey(name: string) {
+        name = name.trim();
+        if (!name) return;
+        
+        try {
+            const wasActive = this.secretManager.getActiveKeyName() === name;
+            
+            await this.secretManager.deleteApiKey(name);
+            
+            if (wasActive) {
+                // If we deleted the active key, try to select the next available key
+                const remainingKeys = await this.secretManager.getAllKeyNames();
+                const newActive = remainingKeys.length > 0 ? remainingKeys[0] : '';
+                await this.secretManager.setActiveKeyName(newActive);
+            }
+            
+            this.sendMessageToWebview('success', `API Key '${name}' deleted.`);
+            this.sendKeyManagementDetails();
+            this.initializeApiAgent();
+        } catch (e) {
+             console.error("Failed to delete API key:", e);
+            this.sendMessageToWebview('error', `Failed to delete API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    
+    private async handleSelectApiKey(name: string) {
+        name = name.trim();
+        if (!name) return;
+        
+        try {
+            await this.secretManager.setActiveKeyName(name);
+            this.sendMessageToWebview('success', `API Key set to '${name}'.`);
+            this.sendKeyManagementDetails(); // Update UI list
+            this.initializeApiAgent();      // Refresh API agent connection
+        } catch (e) {
+             console.error("Failed to select API key:", e);
+            this.sendMessageToWebview('error', `Failed to select API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    // --- End New Key Management Handlers ---
 
     private async handleAddFileContext() {
         const options: vscode.OpenDialogOptions = {
@@ -247,7 +386,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         }
     }
     
-    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette', content: string) {
+    private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette' | 'success', content: string) {
         if (this._view) {
             this._view.webview.postMessage({ command: type, content: content });
         }
@@ -309,10 +448,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 
                 <div id="bottom-controls">
                     
-                    <div id="config-panel" class="hidden">
-                        <input type="password" id="api-key-input" placeholder="Enter your Gemini API Key">
-                        <button id="save-key-button">Save & Activate</button>
-                    </div>
+                    <!-- 4. Removed inline config panel -->
 
                     <div id="context-header">
                         <div id="context-file-controls">
@@ -330,18 +466,42 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                             </button>
+                            
+                            <!-- API Key Management Toggle Button -->
+                            <button id="key-management-toggle" title="Manage API Keys">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
+                                </svg>
+                            </button>
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
                             <ul id="context-file-list">
                                 <!-- Files loaded here -->
                             </ul>
-                            <span id="context-placeholder">Describe what to build next</span>
+                            <span id="active-file-indicator"></span> <!-- 1. New indicator for active file -->
                         </div>
                     </div>
-                
+                    
+                    <!-- NEW: Key Management Panel -->
+                    <div id="key-management-panel" style="display: none;">
+                        <div class="panel-section">
+                            <h4>Active Key Selection</h4>
+                            <ul id="key-list">
+                                <!-- Key buttons loaded here -->
+                            </ul>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Add/Update API Key</h4>
+                            <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required>
+                            <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required>
+                            <button id="key-save-button">Save & Set Active</button>
+                        </div>
+                    </div>
+
                     <div id="action-bar">
-                        <textarea id="prompt-input" placeholder="Ask Gemini..." rows="1"></textarea>
+                        <textarea id="prompt-input" placeholder="Describe what to build next" rows="1"></textarea> <!-- 2. Updated placeholder -->
                         <button id="send-button" title="Send Prompt (Arrow Icon)">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -381,7 +541,10 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 export function activate(context: vscode.ExtensionContext) {
     console.log('Gemini Local Coder extension is now active!');
 
-    const provider = new GeminiCoderProvider(context.extensionUri);
+    // Initialize Secret Storage Manager
+    const secretManager = new SecretStorageManager(context.secrets);
+
+    const provider = new GeminiCoderProvider(context.extensionUri, secretManager); // Pass manager
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
     );
@@ -393,9 +556,8 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
     
-
-
-    const inlineProvider = new GeminiInlineCompletionProvider();
+    // Pass manager to inline provider
+    const inlineProvider = new GeminiInlineCompletionProvider(secretManager);
     const selector: vscode.DocumentSelector = { language: '*', scheme: 'file' };
 
     context.subscriptions.push(
