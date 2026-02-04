@@ -9,18 +9,24 @@ const MAX_CONTEXT_CHARS = 200000; // Limit context size
 
 export class GeminiInlineCompletionProvider implements vscode.InlineCompletionItemProvider {
     private apiAgent: GoogleGenAI | null = null;
-    private readonly model = 'gemini-2.5-flash';
+    private model: string;
 
     private readonly debounceController = new DebounceController<string>(() => 
         ConfigurationManager.getDebounceDelay()
     );
 
     constructor(private readonly secretManager: SecretStorageManager) { // NEW DEPENDENCY
+        this.model = ConfigurationManager.getInlineModel(); // Initialize model
         this.initializeApiAgent();
-        // Listen for configuration changes related to active key or debounce
+        
+        // Listen for configuration changes related to active key or models/debounce
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration('gemini.activeApiKeyName') || e.affectsConfiguration('gemini.latency.debounceMs')) {
                  this.initializeApiAgent();
+            }
+            if (e.affectsConfiguration('gemini.inlineModel')) {
+                 this.model = ConfigurationManager.getInlineModel();
+                 console.log(`Inline model updated to: ${this.model}`);
             }
         });
     }

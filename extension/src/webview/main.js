@@ -18,6 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const keyValueInput = document.getElementById('key-value-input');
     const keySaveButton = document.getElementById('key-save-button');
     const keyList = document.getElementById('key-list');
+
+    // NEW Settings Elements
+    const settingsToggle = document.getElementById('settings-toggle');
+    const settingsPanel = document.getElementById('settings-panel');
+    const chatModelSelect = document.getElementById('chat-model-select');
+    const inlineModelSelect = document.getElementById('inline-model-select');
+    const debounceInput = document.getElementById('debounce-input');
     
     // UI ELEMENTS FOR F3
     const contextHeader = document.getElementById('context-header');
@@ -71,6 +78,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // R6: Key Management Toggle
     keyManagementToggle.addEventListener('click', () => {
         const isHidden = keyManagementPanel.style.display === 'none' || !keyManagementPanel.style.display;
+        
+        // Hide settings panel if it was open
+        settingsPanel.style.display = 'none';
+        
         if (isHidden) {
             // Request fresh list whenever the panel is opened
             postMessage('requestKeyManagementDetails');
@@ -80,7 +91,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // Hide palette if active
         togglePalette(false);
     });
+
+    // NEW: Settings Toggle
+    settingsToggle.addEventListener('click', () => {
+        const isHidden = settingsPanel.style.display === 'none' || !settingsPanel.style.display;
+        
+        // Hide key management panel if it was open
+        keyManagementPanel.style.display = 'none';
+
+        if (isHidden) {
+            // Request current configuration data whenever the panel is opened
+            postMessage('requestSettingsDetails');
+        }
+        settingsPanel.style.display = isHidden ? 'flex' : 'none';
+
+        // Hide palette if active
+        togglePalette(false);
+    });
     
+    // NEW: Settings Change Listeners
+    chatModelSelect.addEventListener('change', (e) => {
+        postMessage('setChatModel', { value: e.target.value });
+    });
+    inlineModelSelect.addEventListener('change', (e) => {
+        postMessage('setInlineModel', { value: e.target.value });
+    });
+    debounceInput.addEventListener('change', (e) => {
+        postMessage('setDebounceDelay', { value: e.target.value });
+    });
+
+
     // R6: Key Save Handler
     keySaveButton.addEventListener('click', () => {
         const name = keyNameInput.value;
@@ -437,6 +477,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     contextHeader.classList.add('key-missing'); 
                 }
                 updateContextFileList(message.contextFiles || []);
+                
+                // NEW: Update Settings UI if config data is present
+                if (message.config) {
+                    chatModelSelect.value = message.config.chatModel;
+                    inlineModelSelect.value = message.config.inlineModel;
+                    debounceInput.value = message.config.debounceMs;
+                }
                 break;
             
             case 'keyManagementDetails': // R6: Handle key list update

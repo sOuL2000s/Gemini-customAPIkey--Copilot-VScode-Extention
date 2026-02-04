@@ -312,8 +312,8 @@ body {
     opacity: 1;
 }
 
-/* --- Key Management Panel (R6) --- */
-#key-management-panel {
+/* --- Key Management/Settings Panels (R6/New) --- */
+#key-management-panel, #settings-panel {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -408,6 +408,38 @@ body {
     border: 1px solid var(--vscode-input-border);
     color: var(--vscode-inputForeground);
 }
+
+#chat-model-select, #inline-model-select {
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+    /* High contrast style requested by user */
+    background-color: var(--vscode-editor-background, #1e1e1e); 
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-editorForeground, #ffffff);
+}
+
+.settings-input-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+.settings-input-group input[type="number"] {
+    flex-grow: 1;
+    padding: 5px;
+    box-sizing: border-box;
+    background-color: var(--vscode-inputBackground);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-inputForeground);
+    text-align: right;
+}
+.settings-hint {
+    font-size: 11px;
+    color: var(--vscode-inputPlaceholderForeground);
+    margin: 0;
+}
 #key-save-button {
     width: 100%;
     background-color: var(--vscode-button-background);
@@ -451,7 +483,8 @@ body {
 /* --- Icon Buttons (New Chat, Attachment, Settings) --- */
 #new-chat-button, 
 #add-context-file-button,
-#settings-button { /* 4. Added settings button */
+#key-management-toggle,
+#settings-toggle {
     background: none;
     border: none;
     color: var(--vscode-foreground);
@@ -467,7 +500,8 @@ body {
 
 #new-chat-button:hover, 
 #add-context-file-button:hover,
-#settings-button:hover { /* 4. Added settings button */
+#key-management-toggle:hover,
+#settings-toggle:hover {
     opacity: 1;
 }
 

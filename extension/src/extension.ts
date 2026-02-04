@@ -5,7 +5,7 @@ import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
 import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
 
 // --- Configuration ---
-const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025"; 
+// Removed GEMINI_CHAT_MODEL constant, now read from config
 
 /**
  * Utility function to generate a nonce for CSP.
@@ -29,7 +29,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private apiAgent: GoogleGenAI | null = null;
     
-    private readonly chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
+    private chatModel: string;
     private contextFiles: Map<string, string> = new Map(); 
     private activeFileName: string | null = null; // 1. Track active file
     
@@ -37,13 +37,22 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         private readonly _extensionUri: vscode.Uri,
         private readonly secretManager: SecretStorageManager // NEW DEPENDENCY
     ) {
+        this.chatModel = ConfigurationManager.getChatModel(); // Initialize model
         this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
 
-        // Listen for configuration changes (specifically activeApiKeyName)
+        // Listen for configuration changes (specifically activeApiKeyName, models, or debounce)
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration('gemini.activeApiKeyName')) {
                 this.initializeApiAgent();
+            }
+            if (e.affectsConfiguration('gemini.chatModel')) {
+                this.chatModel = ConfigurationManager.getChatModel();
+                console.log(`Chat model updated to: ${this.chatModel}`);
+                this.postViewStatus(); // Update webview UI
+            }
+            if (e.affectsConfiguration('gemini.inlineModel') || e.affectsConfiguration('gemini.latency.debounceMs')) {
+                this.postViewStatus(); // Update webview UI
             }
         });
         // 1. Listen for active editor changes
@@ -77,7 +86,13 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 keyStatus: this.apiAgent !== null,
                 contextFiles: Array.from(this.contextFiles.keys()),
                 activeFile: this.activeFileName, // 1. Pass active file name
-                activeKeyName: activeKeyName // NEW: Pass active key name
+                activeKeyName: activeKeyName, // NEW: Pass active key name
+                // NEW: Configuration Status
+                config: {
+                    chatModel: ConfigurationManager.getChatModel(),
+                    inlineModel: ConfigurationManager.getInlineModel(),
+                    debounceMs: ConfigurationManager.getDebounceDelay()
+                }
             });
             // Also notify the webview immediately about key management details if panel is open
             this.sendKeyManagementDetails();
@@ -125,6 +140,18 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     return;
                 case 'newChat':
                     this.handleNewChatSession();
+                    return;
+                case 'requestSettingsDetails':
+                    this.postViewStatus(); // Forces sending config data
+                    return;
+                case 'setChatModel':
+                    this.handleSetChatModel(message.value);
+                    return;
+                case 'setInlineModel':
+                    this.handleSetInlineModel(message.value);
+                    return;
+                case 'setDebounceDelay':
+                    this.handleSetDebounceDelay(message.value);
                     return;
                 // DEPRECATED SETTINGS COMMAND:
                 case 'openSettings': 
@@ -252,6 +279,46 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         }
     }
     // --- End New Key Management Handlers ---
+    
+    // --- New Settings Handlers ---
+    private async handleSetChatModel(model: string) {
+        try {
+            await ConfigurationManager.setChatModel(model);
+            this.sendMessageToWebview('success', `Chat model set to ${model}.`);
+            // Configuration change handler will update this.chatModel and postViewStatus
+        } catch (e) {
+            console.error("Failed to set chat model:", e);
+            this.sendMessageToWebview('error', `Failed to set Chat Model.`);
+        }
+    }
+    
+    private async handleSetInlineModel(model: string) {
+        try {
+            await ConfigurationManager.setInlineModel(model);
+            this.sendMessageToWebview('success', `Inline model set to ${model}.`);
+            // Configuration change handler will automatically update the inline provider
+        } catch (e) {
+            console.error("Failed to set inline model:", e);
+            this.sendMessageToWebview('error', `Failed to set Inline Model.`);
+        }
+    }
+    
+    private async handleSetDebounceDelay(delayStr: string) {
+        const delay = parseInt(delayStr, 10);
+        if (isNaN(delay) || delay < 100 || delay > 2000) {
+            this.sendMessageToWebview('error', 'Invalid debounce delay. Must be between 100ms and 2000ms.');
+            return;
+        }
+        try {
+            await ConfigurationManager.setDebounceDelay(delay);
+            this.sendMessageToWebview('success', `Debounce delay set to ${delay}ms.`);
+            // Configuration change handler will automatically update the inline provider's debounce controller
+        } catch (e) {
+            console.error("Failed to set debounce delay:", e);
+            this.sendMessageToWebview('error', `Failed to set debounce delay.`);
+        }
+    }
+
 
     private async handleAddFileContext() {
         const options: vscode.OpenDialogOptions = {
@@ -474,6 +541,19 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
                                 </svg>
                             </button>
+                            
+                            <!-- Settings Toggle Button (New) -->
+                            <button id="settings-toggle" title="Model and Latency Settings">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 20V10"/>
+                                    <path d="M18 20V4"/>
+                                    <path d="M6 20V16"/>
+                                    <path d="M6 12L6.01 12"/>
+                                    <path d="M18 8L18.01 8"/>
+                                    <path d="M12 16L12.01 16"/>
+                                </svg>
+                            </button>
+                            
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -497,6 +577,34 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required>
                             <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required>
                             <button id="key-save-button">Save & Set Active</button>
+                        </div>
+                    </div>
+                    
+                    <!-- NEW: Settings Panel -->
+                    <div id="settings-panel" style="display: none;">
+                        <div class="panel-section">
+                            <h4>Chat Model Selection</h4>
+                            <select id="chat-model-select">
+                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                            </select>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Inline Completion Model</h4>
+                            <select id="inline-model-select">
+                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                            </select>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Inline Latency (Debounce)</h4>
+                            <div class="settings-input-group">
+                                <input type="number" id="debounce-input" min="100" max="2000" step="100" placeholder="500">
+                                <span>ms</span>
+                            </div>
+                            <p class="settings-hint">Delay after typing stops before completion request (100ms - 2000ms).</p>
                         </div>
                     </div>
 
