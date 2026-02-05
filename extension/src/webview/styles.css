@@ -557,7 +557,7 @@ body {
     outline: none;
 }
 #palette-input::placeholder {
-    /* Shortcut updated to Ctrl+Shift+G */
+    /* Shortcut updated to Ctrl+Alt+H */
     color: var(--vscode-inputPlaceholderForeground);
 }
 

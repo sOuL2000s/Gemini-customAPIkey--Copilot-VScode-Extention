@@ -322,34 +322,43 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
     private async handleAddFileContext() {
         const options: vscode.OpenDialogOptions = {
-            canSelectMany: false,
-            openLabel: 'Select file for context',
+            canSelectMany: true,
+            openLabel: 'Select files for context',
             filters: {
                 'Code Files': ['ts', 'js', 'py', 'json', 'yaml', 'txt', 'md'],
                 'All Files': ['*']
             }
         };
 
-        const fileUri = await vscode.window.showOpenDialog(options);
+        const fileUris = await vscode.window.showOpenDialog(options);
 
-        if (fileUri && fileUri.length > 0) {
-            const uri = fileUri[0];
-            try {
-                const contentBytes = await vscode.workspace.fs.readFile(uri);
-                const content = Buffer.from(contentBytes).toString('utf8');
-                
-                // Context limit check
-                if (content.length > 100000) { 
-                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 100,000 characters for chat context.`);
-                    return;
+        if (fileUris && fileUris.length > 0) {
+            let filesAdded = 0;
+            for (const uri of fileUris) {
+                try {
+                    const contentBytes = await vscode.workspace.fs.readFile(uri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    
+                    // Context limit check
+                    if (content.length > 100000) { 
+                        // Skip large files but don't stop the process
+                        this.sendMessageToWebview('error', `Skipped file ${uri.fsPath.split(/[\/\\]/).pop()} (too large: ${content.length} chars).`);
+                        continue;
+                    }
+
+                    this.contextFiles.set(uri.fsPath, content);
+                    filesAdded++;
+
+                } catch (e) {
+                    console.error("Failed to read context file:", e);
+                    this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath.split(/[\/\\]/).pop()}`);
                 }
-
-                this.contextFiles.set(uri.fsPath, content);
+            }
+            if (filesAdded > 0) {
                 this.postViewStatus();
-
-            } catch (e) {
-                console.error("Failed to read context file:", e);
-                this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath}`);
+                this.sendMessageToWebview('success', `Added ${filesAdded} file(s) to chat context.`);
+            } else if (fileUris.length > 0) {
+                this.sendMessageToWebview('error', `No files were added. Check size limits.`);
             }
         }
     }
@@ -508,7 +517,16 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 <div id="chat-container">
                     <div id="chat-history">
                         <div class="message system">
-                            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+                            <p>Hello! I am Gemini, your expert coding assistant.</p>
+                            <p>Here are my key functionalities:</p>
+                            <ul>
+                                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
+                                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
+                                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
+                                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+                            </ul>
+                            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
                         </div>
                     </div>
                 </div>
@@ -621,7 +639,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
                 <!-- R4: INLINE COMMAND PALETTE STRUCTURE (Hidden by default) -->
                 <div id="command-palette">
-                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Shift+G)">
+                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Alt+H)">
                     <ul id="palette-results">
                         <li class="palette-item selected" data-command="/refactor">
                             <span>/refactor selection</span>

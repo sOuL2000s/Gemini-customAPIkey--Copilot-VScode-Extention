@@ -40,7 +40,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const CHAT_STORAGE_KEY = 'geminiLocalCoderChatHistory'; // 3. Storage key
     const initialWelcomeMessage = `
         <div class="message system">
-            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+            <p>Hello! I am Gemini, your expert coding assistant.</p>
+            <p>Here are my key functionalities:</p>
+            <ul>
+                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
+                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
+                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
+                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+            </ul>
+            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
         </div>`;
 
     // 3. Load chat history on startup
@@ -169,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // R4: Command Palette Toggle Logic (Shortcut changed to Ctrl+Shift+G)
+    // R4: Command Palette Toggle Logic (Shortcut corresponds to package.json: Ctrl+Alt+H)
     const togglePalette = (show) => {
         if (show) {
             commandPalette.style.display = 'flex';
@@ -179,10 +188,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Simulate keyboard shortcut Ctrl+Shift+G (or Cmd+Shift+G) to invoke the palette
+    // Simulate keyboard shortcut Ctrl+Alt+H (or Cmd+Alt+H) to invoke the palette
     document.addEventListener('keydown', (e) => {
-        // Check for Ctrl/Cmd + Shift + G
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+        // Check for Ctrl/Cmd + Alt + H
+        if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'h') {
             e.preventDefault();
             togglePalette(commandPalette.style.display === 'none');
             return;
@@ -521,6 +530,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initial auto-resize setup and listener
     promptInput.addEventListener('input', () => {
+        // Check for quick trigger: #/@ followed by optional whitespace
+        const value = promptInput.value.trim();
+        if (value.startsWith('#/@')) {
+            // Clear input and trigger file selection
+            promptInput.value = '';
+            postMessage('addFileContext');
+            
+            // Send feedback to user
+            appendMessage('loading', 'Opening file selection dialog...');
+            
+            // Stop processing the input event further
+            return;
+        }
+        
         promptInput.style.height = 'auto';
         promptInput.style.height = (promptInput.scrollHeight) + 'px';
     });

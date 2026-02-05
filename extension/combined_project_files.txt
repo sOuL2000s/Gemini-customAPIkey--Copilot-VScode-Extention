@@ -18,11 +18,12 @@ tsconfig.json
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
   "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
-  "version": "2.0.0",
-  "publisher": "YourName",
+  "version": "3.0.0",
+  "publisher": "Souparna Paul",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YourName/gemini-local-coder.git"
+    "url": "https://github.com/sOuL2000s/Gemini-customAPIkey--Copilot-VScode-Extention.git"
   },
   "engines": {
     "vscode": "^1.108.0"
@@ -69,11 +70,10 @@ tsconfig.json
     "keybindings": [
       {
         "command": "gemini-local-coder.openCommandPalette",
-        "key": "ctrl+shift+g",
-        "mac": "cmd+shift+g",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h",
         "when": "editorTextFocus"
       }
-
     ],
     "configuration": {
       "title": "Gemini Coder Configuration",
@@ -182,6 +182,53 @@ tsconfig.json
 
 --- END FILE: tsconfig.json ---
 
+--- START FILE: .github\workflows\release.yml ---
+
+name: Release VS Code Extension
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*' # Triggers workflow on pushes of tags matching standard version format (e.g., v1.2.3)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for vsce versioning/tagging info
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies, Compile, and Package VSIX
+        run: |
+          npm install
+          npm run compile
+          npx vsce package
+          
+      # 1. Create GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          # Attach the packaged VSIX file to the GitHub release
+          files: '*.vsix'
+
+
+--- END FILE: .github\workflows\release.yml ---
+
 --- START FILE: media\gemini-icon.svg ---
 
 <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -232,6 +279,34 @@ exports.ConfigurationManager = void 0;
 const vscode = __importStar(require("vscode"));
 class ConfigurationManager {
     /**
+     * Retrieves the configured model for the chat sidebar.
+     */
+    static getChatModel() {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        // Default matches the one defined in package.json
+        return config.get('chatModel') || "gemini-2.5-flash-preview-09-2025";
+    }
+    /**
+     * Sets the configured model for the chat sidebar.
+     */
+    static async setChatModel(model) {
+        await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('chatModel', model, this.CONFIG_TARGET);
+    }
+    /**
+     * Retrieves the configured model for inline completion.
+     */
+    static getInlineModel() {
+        const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
+        // Default matches the one defined in package.json
+        return config.get('inlineModel') || "gemini-2.5-flash";
+    }
+    /**
+     * Sets the configured model for inline completion.
+     */
+    static async setInlineModel(model) {
+        await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('inlineModel', model, this.CONFIG_TARGET);
+    }
+    /**
      * Retrieves the configured debounce delay in milliseconds, respecting bounds.
      */
     static getDebounceDelay() {
@@ -241,16 +316,25 @@ class ConfigurationManager {
         // Respect the defined package.json bounds (100ms to 2000ms)
         return Math.max(100, Math.min(2000, delay));
     }
+    /**
+     * Sets the configured debounce delay in milliseconds.
+     */
+    static async setDebounceDelay(delay) {
+        // Ensure bounds are respected before setting
+        const clampedDelay = Math.max(100, Math.min(2000, delay));
+        await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('latency.debounceMs', clampedDelay, this.CONFIG_TARGET);
+    }
 }
 exports.ConfigurationManager = ConfigurationManager;
 ConfigurationManager.CONFIG_SECTION = 'gemini';
+ConfigurationManager.CONFIG_TARGET = vscode.ConfigurationTarget.Global; // Use Global target for settings managed via sidebar
 //# sourceMappingURL=ConfigurationManager.js.map
 
 --- END FILE: out\ConfigurationManager.js ---
 
 --- START FILE: out\ConfigurationManager.js.map ---
 
-{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAEjC,MAAa,oBAAoB;IAG7B;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;;AAbL,oDAcC;AAb2B,mCAAc,GAAG,QAAQ,CAAC"}
+{"version":3,"file":"ConfigurationManager.js","sourceRoot":"","sources":["../src/ConfigurationManager.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,8BAA8B;AAC9B,+CAAiC;AAEjC,MAAa,oBAAoB;IAI7B;;OAEG;IACI,MAAM,CAAC,YAAY;QACtB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,kDAAkD;QAClD,OAAO,MAAM,CAAC,GAAG,CAAS,WAAW,CAAC,IAAI,kCAAkC,CAAC;IACjF,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,KAAK,CAAC,YAAY,CAAC,KAAa;QAC1C,MAAM,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC,MAAM,CAAC,WAAW,EAAE,KAAK,EAAE,IAAI,CAAC,aAAa,CAAC,CAAC;IAChI,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,cAAc;QACxB,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,kDAAkD;QAClD,OAAO,MAAM,CAAC,GAAG,CAAS,aAAa,CAAC,IAAI,kBAAkB,CAAC;IACnE,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,KAAK,CAAC,cAAc,CAAC,KAAa;QAC5C,MAAM,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC,MAAM,CAAC,aAAa,EAAE,KAAK,EAAE,IAAI,CAAC,aAAa,CAAC,CAAC;IAClI,CAAC;IAGD;;OAEG;IACI,MAAM,CAAC,gBAAgB;QAC1B,MAAM,MAAM,GAAG,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QACtF,qDAAqD;QACrD,MAAM,KAAK,GAAG,MAAM,CAAC,GAAG,CAAS,oBAAoB,CAAC,IAAI,GAAG,CAAC;QAE9D,4DAA4D;QAC5D,OAAO,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;IAChD,CAAC;IAED;;OAEG;IACI,MAAM,CAAC,KAAK,CAAC,gBAAgB,CAAC,KAAa;QAC9C,6CAA6C;QAC7C,MAAM,YAAY,GAAG,IAAI,CAAC,GAAG,CAAC,GAAG,EAAE,IAAI,CAAC,GAAG,CAAC,IAAI,EAAE,KAAK,CAAC,CAAC,CAAC;QAC1D,MAAM,MAAM,CAAC,SAAS,CAAC,gBAAgB,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC,MAAM,CAAC,oBAAoB,EAAE,YAAY,EAAE,IAAI,CAAC,aAAa,CAAC,CAAC;IAChJ,CAAC;;AAxDL,oDAyDC;AAxD2B,mCAAc,GAAG,QAAQ,CAAC;AAC1B,kCAAa,GAAG,MAAM,CAAC,mBAAmB,CAAC,MAAM,CAAC,CAAC,qDAAqD"}
 
 --- END FILE: out\ConfigurationManager.js.map ---
 
@@ -412,10 +496,11 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const genai_1 = require("@google/genai");
+const ConfigurationManager_1 = require("./ConfigurationManager");
 const InlineCompletionProvider_1 = require("./InlineCompletionProvider");
 const SecretStorageManager_1 = require("./SecretStorageManager"); // NEW IMPORT
 // --- Configuration ---
-const GEMINI_CHAT_MODEL = "gemini-2.5-flash-preview-09-2025";
+// Removed GEMINI_CHAT_MODEL constant, now read from config
 /**
  * Utility function to generate a nonce for CSP.
  */
@@ -436,15 +521,23 @@ class GeminiCoderProvider {
         this._extensionUri = _extensionUri;
         this.secretManager = secretManager;
         this.apiAgent = null;
-        this.chatModel = GEMINI_CHAT_MODEL; // Refactoring #5: Used dedicated model constant
         this.contextFiles = new Map();
         this.activeFileName = null; // 1. Track active file
+        this.chatModel = ConfigurationManager_1.ConfigurationManager.getChatModel(); // Initialize model
         this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
-        // Listen for configuration changes (specifically activeApiKeyName)
+        // Listen for configuration changes (specifically activeApiKeyName, models, or debounce)
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration('gemini.activeApiKeyName')) {
                 this.initializeApiAgent();
+            }
+            if (e.affectsConfiguration('gemini.chatModel')) {
+                this.chatModel = ConfigurationManager_1.ConfigurationManager.getChatModel();
+                console.log(`Chat model updated to: ${this.chatModel}`);
+                this.postViewStatus(); // Update webview UI
+            }
+            if (e.affectsConfiguration('gemini.inlineModel') || e.affectsConfiguration('gemini.latency.debounceMs')) {
+                this.postViewStatus(); // Update webview UI
             }
         });
         // 1. Listen for active editor changes
@@ -475,7 +568,13 @@ class GeminiCoderProvider {
                 keyStatus: this.apiAgent !== null,
                 contextFiles: Array.from(this.contextFiles.keys()),
                 activeFile: this.activeFileName, // 1. Pass active file name
-                activeKeyName: activeKeyName // NEW: Pass active key name
+                activeKeyName: activeKeyName, // NEW: Pass active key name
+                // NEW: Configuration Status
+                config: {
+                    chatModel: ConfigurationManager_1.ConfigurationManager.getChatModel(),
+                    inlineModel: ConfigurationManager_1.ConfigurationManager.getInlineModel(),
+                    debounceMs: ConfigurationManager_1.ConfigurationManager.getDebounceDelay()
+                }
             });
             // Also notify the webview immediately about key management details if panel is open
             this.sendKeyManagementDetails();
@@ -514,6 +613,18 @@ class GeminiCoderProvider {
                     return;
                 case 'newChat':
                     this.handleNewChatSession();
+                    return;
+                case 'requestSettingsDetails':
+                    this.postViewStatus(); // Forces sending config data
+                    return;
+                case 'setChatModel':
+                    this.handleSetChatModel(message.value);
+                    return;
+                case 'setInlineModel':
+                    this.handleSetInlineModel(message.value);
+                    return;
+                case 'setDebounceDelay':
+                    this.handleSetDebounceDelay(message.value);
                     return;
                 // DEPRECATED SETTINGS COMMAND:
                 case 'openSettings':
@@ -627,6 +738,45 @@ class GeminiCoderProvider {
         }
     }
     // --- End New Key Management Handlers ---
+    // --- New Settings Handlers ---
+    async handleSetChatModel(model) {
+        try {
+            await ConfigurationManager_1.ConfigurationManager.setChatModel(model);
+            this.sendMessageToWebview('success', `Chat model set to ${model}.`);
+            // Configuration change handler will update this.chatModel and postViewStatus
+        }
+        catch (e) {
+            console.error("Failed to set chat model:", e);
+            this.sendMessageToWebview('error', `Failed to set Chat Model.`);
+        }
+    }
+    async handleSetInlineModel(model) {
+        try {
+            await ConfigurationManager_1.ConfigurationManager.setInlineModel(model);
+            this.sendMessageToWebview('success', `Inline model set to ${model}.`);
+            // Configuration change handler will automatically update the inline provider
+        }
+        catch (e) {
+            console.error("Failed to set inline model:", e);
+            this.sendMessageToWebview('error', `Failed to set Inline Model.`);
+        }
+    }
+    async handleSetDebounceDelay(delayStr) {
+        const delay = parseInt(delayStr, 10);
+        if (isNaN(delay) || delay < 100 || delay > 2000) {
+            this.sendMessageToWebview('error', 'Invalid debounce delay. Must be between 100ms and 2000ms.');
+            return;
+        }
+        try {
+            await ConfigurationManager_1.ConfigurationManager.setDebounceDelay(delay);
+            this.sendMessageToWebview('success', `Debounce delay set to ${delay}ms.`);
+            // Configuration change handler will automatically update the inline provider's debounce controller
+        }
+        catch (e) {
+            console.error("Failed to set debounce delay:", e);
+            this.sendMessageToWebview('error', `Failed to set debounce delay.`);
+        }
+    }
     async handleAddFileContext() {
         const options = {
             canSelectMany: false,
@@ -796,7 +946,16 @@ class GeminiCoderProvider {
                 <div id="chat-container">
                     <div id="chat-history">
                         <div class="message system">
-                            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+                            <p>Hello! I am Gemini, your expert coding assistant.</p>
+                            <p>Here are my key functionalities:</p>
+                            <ul>
+                                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
+                                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
+                                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
+                                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+                            </ul>
+                            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
                         </div>
                     </div>
                 </div>
@@ -829,6 +988,19 @@ class GeminiCoderProvider {
                                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
                                 </svg>
                             </button>
+                            
+                            <!-- Settings Toggle Button (New) -->
+                            <button id="settings-toggle" title="Model and Latency Settings">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 20V10"/>
+                                    <path d="M18 20V4"/>
+                                    <path d="M6 20V16"/>
+                                    <path d="M6 12L6.01 12"/>
+                                    <path d="M18 8L18.01 8"/>
+                                    <path d="M12 16L12.01 16"/>
+                                </svg>
+                            </button>
+                            
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -854,6 +1026,34 @@ class GeminiCoderProvider {
                             <button id="key-save-button">Save & Set Active</button>
                         </div>
                     </div>
+                    
+                    <!-- NEW: Settings Panel -->
+                    <div id="settings-panel" style="display: none;">
+                        <div class="panel-section">
+                            <h4>Chat Model Selection</h4>
+                            <select id="chat-model-select">
+                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                            </select>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Inline Completion Model</h4>
+                            <select id="inline-model-select">
+                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                            </select>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Inline Latency (Debounce)</h4>
+                            <div class="settings-input-group">
+                                <input type="number" id="debounce-input" min="100" max="2000" step="100" placeholder="500">
+                                <span>ms</span>
+                            </div>
+                            <p class="settings-hint">Delay after typing stops before completion request (100ms - 2000ms).</p>
+                        </div>
+                    </div>
 
                     <div id="action-bar">
                         <textarea id="prompt-input" placeholder="Describe what to build next" rows="1"></textarea> <!-- 2. Updated placeholder -->
@@ -868,7 +1068,7 @@ class GeminiCoderProvider {
 
                 <!-- R4: INLINE COMMAND PALETTE STRUCTURE (Hidden by default) -->
                 <div id="command-palette">
-                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Shift+G)">
+                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Alt+H)">
                     <ul id="palette-results">
                         <li class="palette-item selected" data-command="/refactor">
                             <span>/refactor selection</span>
@@ -915,7 +1115,7 @@ function deactivate() { }
 
 --- START FILE: out\extension.js.map ---
 
-{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\extension.js.map ---
 
@@ -967,13 +1167,17 @@ class GeminiInlineCompletionProvider {
     constructor(secretManager) {
         this.secretManager = secretManager;
         this.apiAgent = null;
-        this.model = 'gemini-2.5-flash';
         this.debounceController = new DebounceController_1.DebounceController(() => ConfigurationManager_1.ConfigurationManager.getDebounceDelay());
+        this.model = ConfigurationManager_1.ConfigurationManager.getInlineModel(); // Initialize model
         this.initializeApiAgent();
-        // Listen for configuration changes related to active key or debounce
+        // Listen for configuration changes related to active key or models/debounce
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration('gemini.activeApiKeyName') || e.affectsConfiguration('gemini.latency.debounceMs')) {
                 this.initializeApiAgent();
+            }
+            if (e.affectsConfiguration('gemini.inlineModel')) {
+                this.model = ConfigurationManager_1.ConfigurationManager.getInlineModel();
+                console.log(`Inline model updated to: ${this.model}`);
             }
         });
     }
@@ -1076,7 +1280,7 @@ exports.GeminiInlineCompletionProvider = GeminiInlineCompletionProvider;
 
 --- START FILE: out\InlineCompletionProvider.js.map ---
 
-{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"InlineCompletionProvider.js","sourceRoot":"","sources":["../src/InlineCompletionProvider.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,kCAAkC;AAClC,+CAAiC;AACjC,yCAA4C;AAC5C,6DAA0D;AAC1D,iEAA8D;AAG9D,MAAM,iBAAiB,GAAG,MAAM,CAAC,CAAC,qBAAqB;AAEvD,MAAa,8BAA8B;IAQvC,YAA6B,aAAmC;QAAnC,kBAAa,GAAb,aAAa,CAAsB;QAPxD,aAAQ,GAAuB,IAAI,CAAC;QAG3B,uBAAkB,GAAG,IAAI,uCAAkB,CAAS,GAAG,EAAE,CACtE,2CAAoB,CAAC,gBAAgB,EAAE,CAC1C,CAAC;QAGE,IAAI,CAAC,KAAK,GAAG,2CAAoB,CAAC,cAAc,EAAE,CAAC,CAAC,mBAAmB;QACvE,IAAI,CAAC,kBAAkB,EAAE,CAAC;QAE1B,4EAA4E;QAC5E,MAAM,CAAC,SAAS,CAAC,wBAAwB,CAAC,CAAC,CAAC,EAAE,EAAE;YAC5C,IAAI,CAAC,CAAC,oBAAoB,CAAC,yBAAyB,CAAC,IAAI,CAAC,CAAC,oBAAoB,CAAC,2BAA2B,CAAC,EAAE,CAAC;gBAC1G,IAAI,CAAC,kBAAkB,EAAE,CAAC;YAC/B,CAAC;YACD,IAAI,CAAC,CAAC,oBAAoB,CAAC,oBAAoB,CAAC,EAAE,CAAC;gBAC9C,IAAI,CAAC,KAAK,GAAG,2CAAoB,CAAC,cAAc,EAAE,CAAC;gBACnD,OAAO,CAAC,GAAG,CAAC,4BAA4B,IAAI,CAAC,KAAK,EAAE,CAAC,CAAC;YAC3D,CAAC;QACL,CAAC,CAAC,CAAC;IACP,CAAC;IAEO,KAAK,CAAC,kBAAkB;QAC5B,2DAA2D;QAC3D,MAAM,MAAM,GAAG,MAAM,IAAI,CAAC,aAAa,CAAC,eAAe,EAAE,CAAC;QAC1D,IAAI,MAAM,EAAE,CAAC;YACT,IAAI,CAAC,QAAQ,GAAG,IAAI,mBAAW,CAAC,EAAE,MAAM,EAAE,CAAC,CAAC;YAC5C,OAAO,CAAC,GAAG,CAAC,sDAAsD,CAAC,CAAC;QACxE,CAAC;aAAM,CAAC;YACJ,IAAI,CAAC,QAAQ,GAAG,IAAI,CAAC;QACzB,CAAC;IACL,CAAC;IAEM,KAAK,CAAC,4BAA4B,CACrC,QAA6B,EAC7B,QAAyB,EACzB,OAAuC,EACvC,KAA+B;QAG/B,IAAI,CAAC,IAAI,CAAC,QAAQ,IAAI,KAAK,CAAC,uBAAuB,EAAE,CAAC;YAClD,OAAO,IAAI,CAAC;QAChB,CAAC;QAED,8CAA8C;QAC9C,MAAM,MAAM,GAAG,IAAI,CAAC,qBAAqB,CAAC,QAAQ,EAAE,QAAQ,CAAC,CAAC;QAC9D,IAAI,CAAC,MAAM,EAAE,CAAC;YACT,OAAO,IAAI,CAAC;QACjB,CAAC;QAED,mCAAmC;QACnC,MAAM,cAAc,GAAG,MAAM,IAAI,CAAC,kBAAkB,CAAC,QAAQ,CAAC,KAAK,EAAE,iBAAiB,EAAE,EAAE;YAEtF,IAAI,iBAAiB,CAAC,uBAAuB,EAAE,CAAC;gBAC5C,OAAO,SAAS,CAAC;YACrB,CAAC;YAED,IAAI,CAAC;gBACD,MAAM,QAAQ,GAAG,MAAM,IAAI,CAAC,QAAS,CAAC,MAAM,CAAC,eAAe,CAAC;oBACzD,KAAK,EAAE,IAAI,CAAC,KAAK;oBACjB,QAAQ,EAAE,MAAM;iBACnB,CAAC,CAAC;gBAEH,gFAAgF;gBAChF,MAAM,aAAa,GAAG,CAAC,QAAQ,CAAC,IAAI,IAAI,EAAE,CAAC,CAAC,IAAI,EAAE,CAAC;gBAEnD,gEAAgE;gBAChE,MAAM,UAAU,GAAG,QAAQ,CAAC,OAAO,CAAC,IAAI,MAAM,CAAC,KAAK,CAAC,QAAQ,EAAE,QAAQ,CAAC,MAAM,CAAC,QAAQ,CAAC,IAAI,CAAC,CAAC,KAAK,CAAC,GAAG,CAAC,CAAC,CAAC;gBAE1G,IAAI,eAAe,GAAG,aAAa,CAAC,SAAS,EAAE,CAAC;gBAEhD,0DAA0D;gBAC1D,IAAI,UAAU,IAAI,eAAe,CAAC,UAAU,CAAC,UAAU,CAAC,EAAE,CAAC;oBACvD,eAAe,GAAG,eAAe,CAAC,SAAS,CAAC,UAAU,CAAC,MAAM,CAAC,CAAC;gBACnE,CAAC;gBAED,IAAI,CAAC,eAAe,CAAC,IAAI,EAAE,EAAE,CAAC;oBAC1B,OAAO,SAAS,CAAC;gBACrB,CAAC;gBAED,OAAO,eAAe,CAAC;YAE3B,CAAC;YAAC,OAAO,CAAC,EAAE,CAAC;gBACT,IAAI,CAAC,iBAAiB,CAAC,uBAAuB,EAAE,CAAC;oBAC7C,OAAO,CAAC,KAAK,CAAC,gCAAgC,EAAE,CAAC,CAAC,CAAC;gBACvD,CAAC;gBACD,OAAO,SAAS,CAAC;YACrB,CAAC;QACL,CAAC,CAAC,CAAC;QAEH,IAAI,CAAC,cAAc,EAAE,CAAC;YAClB,OAAO,IAAI,CAAC;QAChB,CAAC;QAED,mCAAmC;QACnC,MAAM,IAAI,GAAG,IAAI,MAAM,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;QAC7D,4DAA4D;QAC5D,IAAI,CAAC,KAAK,GAAG,IAAI,MAAM,CAAC,KAAK,CAAC,QAAQ,EAAE,QAAQ,CAAC,CAAC;QAElD,OAAO,CAAC,IAAI,CAAC,CAAC;IAClB,CAAC;IAEO,qBAAqB,CAAC,QAA6B,EAAE,QAAyB;QAClF,MAAM,WAAW,GAAG,QAAQ,CAAC,OAAO,EAAE,CAAC;QAEvC,4CAA4C;QAC5C,IAAI,WAAW,CAAC,MAAM,GAAG,iBAAiB,EAAE,CAAC;YACzC,OAAO,CAAC,IAAI,CAAC,wBAAwB,iBAAiB,0CAA0C,CAAC,CAAC;YAClG,OAAO,IAAI,CAAC;QAChB,CAAC;QAED,MAAM,QAAQ,GAAG,QAAQ,CAAC,UAAU,CAAC;QACrC,MAAM,MAAM,GAAG,QAAQ,CAAC,QAAQ,CAAC,QAAQ,CAAC,CAAC;QAE3C,MAAM,aAAa,GAAG,WAAW,CAAC,SAAS,CAAC,CAAC,EAAE,MAAM,CAAC,CAAC;QACvD,MAAM,YAAY,GAAG,WAAW,CAAC,SAAS,CAAC,MAAM,CAAC,CAAC;QAEnD,MAAM,eAAe,GAAG,QAAQ,CAAC,MAAM,CAAC,QAAQ,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC;QAC5D,MAAM,WAAW,GAAG,eAAe,CAAC,KAAK,CAAC,QAAQ,CAAC,EAAE,CAAC,CAAC,CAAC,IAAI,EAAE,CAAC;QAE/D,MAAM,iBAAiB,GAAG,4DAA4D,QAAQ,wGAAwG,CAAC;QAEvM,MAAM,UAAU,GAAG;EACzB,iBAAiB;;;kBAGD,QAAQ,CAAC,QAAQ;EACjC,aAAa;EACb,YAAY;;;;;4DAK8C,QAAQ;2CACzB,WAAW;;CAErD,CAAC;QACM,OAAO,UAAU,CAAC;IACtB,CAAC;CACJ;AA7ID,wEA6IC"}
 
 --- END FILE: out\InlineCompletionProvider.js.map ---
 
@@ -1301,6 +1505,7 @@ export class ConfigurationManager {
         await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('latency.debounceMs', clampedDelay, this.CONFIG_TARGET);
     }
 }
+
 
 --- END FILE: src\ConfigurationManager.ts ---
 
@@ -1709,37 +1914,44 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
 
     private async handleAddFileContext() {
-
-    private async handleAddFileContext() {
         const options: vscode.OpenDialogOptions = {
-            canSelectMany: false,
-            openLabel: 'Select file for context',
+            canSelectMany: true,
+            openLabel: 'Select files for context',
             filters: {
                 'Code Files': ['ts', 'js', 'py', 'json', 'yaml', 'txt', 'md'],
                 'All Files': ['*']
             }
         };
 
-        const fileUri = await vscode.window.showOpenDialog(options);
+        const fileUris = await vscode.window.showOpenDialog(options);
 
-        if (fileUri && fileUri.length > 0) {
-            const uri = fileUri[0];
-            try {
-                const contentBytes = await vscode.workspace.fs.readFile(uri);
-                const content = Buffer.from(contentBytes).toString('utf8');
-                
-                // Context limit check
-                if (content.length > 100000) { 
-                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 100,000 characters for chat context.`);
-                    return;
+        if (fileUris && fileUris.length > 0) {
+            let filesAdded = 0;
+            for (const uri of fileUris) {
+                try {
+                    const contentBytes = await vscode.workspace.fs.readFile(uri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    
+                    // Context limit check
+                    if (content.length > 100000) { 
+                        // Skip large files but don't stop the process
+                        this.sendMessageToWebview('error', `Skipped file ${uri.fsPath.split(/[\/\\]/).pop()} (too large: ${content.length} chars).`);
+                        continue;
+                    }
+
+                    this.contextFiles.set(uri.fsPath, content);
+                    filesAdded++;
+
+                } catch (e) {
+                    console.error("Failed to read context file:", e);
+                    this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath.split(/[\/\\]/).pop()}`);
                 }
-
-                this.contextFiles.set(uri.fsPath, content);
+            }
+            if (filesAdded > 0) {
                 this.postViewStatus();
-
-            } catch (e) {
-                console.error("Failed to read context file:", e);
-                this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath}`);
+                this.sendMessageToWebview('success', `Added ${filesAdded} file(s) to chat context.`);
+            } else if (fileUris.length > 0) {
+                this.sendMessageToWebview('error', `No files were added. Check size limits.`);
             }
         }
     }
@@ -1898,7 +2110,16 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 <div id="chat-container">
                     <div id="chat-history">
                         <div class="message system">
-                            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+                            <p>Hello! I am Gemini, your expert coding assistant.</p>
+                            <p>Here are my key functionalities:</p>
+                            <ul>
+                                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
+                                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
+                                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
+                                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+                            </ul>
+                            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
                         </div>
                     </div>
                 </div>
@@ -2011,7 +2232,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
                 <!-- R4: INLINE COMMAND PALETTE STRUCTURE (Hidden by default) -->
                 <div id="command-palette">
-                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Shift+G)">
+                    <input type="text" id="palette-input" placeholder="Gemini Command Palette (Ctrl+Alt+H)">
                     <ul id="palette-results">
                         <li class="palette-item selected" data-command="/refactor">
                             <span>/refactor selection</span>
@@ -2066,6 +2287,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() { }
+
 
 --- END FILE: src\extension.ts ---
 
@@ -2441,7 +2663,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const CHAT_STORAGE_KEY = 'geminiLocalCoderChatHistory'; // 3. Storage key
     const initialWelcomeMessage = `
         <div class="message system">
-            Hello! I am Gemini. Ask me about the code you've selected, or how to implement a new feature.
+            <p>Hello! I am Gemini, your expert coding assistant.</p>
+            <p>Here are my key functionalities:</p>
+            <ul>
+                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
+                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
+                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
+                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+            </ul>
+            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
         </div>`;
 
     // 3. Load chat history on startup
@@ -2570,7 +2801,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // R4: Command Palette Toggle Logic (Shortcut changed to Ctrl+Shift+G)
+    // R4: Command Palette Toggle Logic (Shortcut corresponds to package.json: Ctrl+Alt+H)
     const togglePalette = (show) => {
         if (show) {
             commandPalette.style.display = 'flex';
@@ -2580,10 +2811,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Simulate keyboard shortcut Ctrl+Shift+G (or Cmd+Shift+G) to invoke the palette
+    // Simulate keyboard shortcut Ctrl+Alt+H (or Cmd+Alt+H) to invoke the palette
     document.addEventListener('keydown', (e) => {
-        // Check for Ctrl/Cmd + Shift + G
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+        // Check for Ctrl/Cmd + Alt + H
+        if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'h') {
             e.preventDefault();
             togglePalette(commandPalette.style.display === 'none');
             return;
@@ -2922,6 +3153,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initial auto-resize setup and listener
     promptInput.addEventListener('input', () => {
+        // Check for quick trigger: #/@ followed by optional whitespace
+        const value = promptInput.value.trim();
+        if (value.startsWith('#/@')) {
+            // Clear input and trigger file selection
+            promptInput.value = '';
+            postMessage('addFileContext');
+            
+            // Send feedback to user
+            appendMessage('loading', 'Opening file selection dialog...');
+            
+            // Stop processing the input event further
+            return;
+        }
+        
         promptInput.style.height = 'auto';
         promptInput.style.height = (promptInput.scrollHeight) + 'px';
     });
@@ -2993,6 +3238,7 @@ document.addEventListener('DOMContentLoaded', () => {
              .replace(/'/g, "&#039;");
     }
 });
+
 
 --- END FILE: src\webview\main.js ---
 
@@ -3557,7 +3803,7 @@ body {
     outline: none;
 }
 #palette-input::placeholder {
-    /* Shortcut updated to Ctrl+Shift+G */
+    /* Shortcut updated to Ctrl+Alt+H */
     color: var(--vscode-inputPlaceholderForeground);
 }
 
@@ -3594,5 +3840,6 @@ body {
         width: 95%;
     }
 }
+
 
 --- END FILE: src\webview\styles.css ---
