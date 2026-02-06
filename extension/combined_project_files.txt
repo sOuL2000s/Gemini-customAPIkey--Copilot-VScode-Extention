@@ -195,6 +195,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allows the job to create releases and upload assets
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
