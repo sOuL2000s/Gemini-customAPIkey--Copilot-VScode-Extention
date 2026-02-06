@@ -3,7 +3,8 @@ name: Release VS Code Extension
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*' # Triggers workflow on pushes of tags matching standard version format (e.g., v1.2.3)
+      - '[0-9]+.[0-9]+.[0-9]+*' # Tags without 'v' (e.g., 1.2.3)
+      - 'v[0-9]+.[0-9]+.[0-9]+*' # Tags with 'v' (e.g., v1.2.3)
 
 jobs:
   release:
@@ -26,7 +27,7 @@ jobs:
           npm run compile
           npx vsce package
           
-      # 1. Create GitHub Release
+      # 2. Create GitHub Release
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
