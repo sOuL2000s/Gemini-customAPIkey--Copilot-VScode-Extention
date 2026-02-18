@@ -97,13 +97,97 @@ tsconfig.json
           "description": "The Gemini model used for the sidebar chat view.",
           "enum": [
             "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-001",
+            "gemini-2.0-flash-exp-image-generation",
+            "gemini-2.0-flash-lite-001",
+            "gemini-2.0-flash-lite",
+            "gemini-exp-1206",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-pro-latest",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-image",
             "gemini-2.5-flash-preview-09-2025",
-            "gemini-2.5-flash-lite-preview-09-2025"
+            "gemini-2.5-flash-lite-preview-09-2025",
+            "gemini-3-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3-pro-image-preview",
+            "gemini-robotics-er-1.5-preview",
+            "gemini-2.5-computer-use-preview-10-2025",
+            "gemini-embedding-001",
+            "imagen-4.0-generate-preview-06-06",
+            "imagen-4.0-ultra-generate-preview-06-06",
+            "imagen-4.0-generate-001",
+            "imagen-4.0-ultra-generate-001",
+            "imagen-4.0-fast-generate-001",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-2.5-pro-preview-tts",
+            "gemini-2.5-flash-native-audio-latest",
+            "gemini-2.5-flash-native-audio-preview-09-2025",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+            "gemma-3-1b-it",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+            "gemma-3n-e4b-it",
+            "gemma-3n-e2b-it",
+            "nano-banana-pro-preview",
+            "deep-research-pro-preview-12-2025",
+            "aqa",
+            "veo-2.0-generate-001",
+            "veo-3.0-generate-001",
+            "veo-3.0-fast-generate-001",
+            "veo-3.1-generate-preview",
+            "veo-3.1-fast-generate-preview"
           ],
           "enumDescriptions": [
-            "Advanced",
-            "Basic (Default)",
-            "Lite"
+            "Gemini 2.5 Flash",
+            "Gemini 2.5 Pro",
+            "Gemini 2.0 Flash",
+            "Gemini 2.0 Flash 001",
+            "Gemini 2.0 Flash Exp (Image Generation)",
+            "Gemini 2.0 Flash Lite 001",
+            "Gemini 2.0 Flash Lite",
+            "Gemini Exp 1206",
+            "Gemini Flash Latest",
+            "Gemini Flash Lite Latest",
+            "Gemini Pro Latest",
+            "Gemini 2.5 Flash Lite",
+            "Gemini 2.5 Flash (Image)",
+            "Gemini 2.5 Flash Preview (Default)",
+            "Gemini 2.5 Flash Lite Preview",
+            "Gemini 3 Pro Preview",
+            "Gemini 3 Flash Preview",
+            "Gemini 3 Pro Image Preview",
+            "Gemini Robotics ER 1.5 Preview",
+            "Gemini 2.5 Computer Use Preview",
+            "Gemini Embedding 001",
+            "Imagen 4.0 Generate Preview (06-06)",
+            "Imagen 4.0 Ultra Generate Preview (06-06)",
+            "Imagen 4.0 Generate 001",
+            "Imagen 4.0 Ultra Generate 001",
+            "Imagen 4.0 Fast Generate 001",
+            "Gemini 2.5 Flash Preview (TTS)",
+            "Gemini 2.5 Pro Preview (TTS)",
+            "Gemini 2.5 Flash Native Audio Latest",
+            "Gemini 2.5 Flash Native Audio Preview (09-2025)",
+            "Gemini 2.5 Flash Native Audio Preview (12-2025)",
+            "Gemma 3 1B IT",
+            "Gemma 3 4B IT",
+            "Gemma 3 12B IT",
+            "Gemma 3 27B IT",
+            "Gemma 3N E4B IT",
+            "Gemma 3N E2B IT",
+            "Nano Banana Pro Preview",
+            "Deep Research Pro Preview (12-2025)",
+            "AQA",
+            "Veo 2.0 Generate 001",
+            "Veo 3.0 Generate 001",
+            "Veo 3.0 Fast Generate 001",
+            "Veo 3.1 Generate Preview",
+            "Veo 3.1 Fast Generate Preview"
           ]
         },
         "gemini.inlineModel": {
@@ -112,13 +196,97 @@ tsconfig.json
           "description": "The Gemini model used for inline code completions (requires a fast model).",
           "enum": [
             "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-001",
+            "gemini-2.0-flash-exp-image-generation",
+            "gemini-2.0-flash-lite-001",
+            "gemini-2.0-flash-lite",
+            "gemini-exp-1206",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-pro-latest",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-image",
             "gemini-2.5-flash-preview-09-2025",
-            "gemini-2.5-flash-lite-preview-09-2025"
+            "gemini-2.5-flash-lite-preview-09-2025",
+            "gemini-3-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3-pro-image-preview",
+            "gemini-robotics-er-1.5-preview",
+            "gemini-2.5-computer-use-preview-10-2025",
+            "gemini-embedding-001",
+            "imagen-4.0-generate-preview-06-06",
+            "imagen-4.0-ultra-generate-preview-06-06",
+            "imagen-4.0-generate-001",
+            "imagen-4.0-ultra-generate-001",
+            "imagen-4.0-fast-generate-001",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-2.5-pro-preview-tts",
+            "gemini-2.5-flash-native-audio-latest",
+            "gemini-2.5-flash-native-audio-preview-09-2025",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+            "gemma-3-1b-it",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+            "gemma-3n-e4b-it",
+            "gemma-3n-e2b-it",
+            "nano-banana-pro-preview",
+            "deep-research-pro-preview-12-2025",
+            "aqa",
+            "veo-2.0-generate-001",
+            "veo-3.0-generate-001",
+            "veo-3.0-fast-generate-001",
+            "veo-3.1-generate-preview",
+            "veo-3.1-fast-generate-preview"
           ],
           "enumDescriptions": [
-            "Advanced",
-            "Basic (Default)",
-            "Lite"
+            "Gemini 2.5 Flash",
+            "Gemini 2.5 Pro",
+            "Gemini 2.0 Flash",
+            "Gemini 2.0 Flash 001",
+            "Gemini 2.0 Flash Exp (Image Generation)",
+            "Gemini 2.0 Flash Lite 001",
+            "Gemini 2.0 Flash Lite",
+            "Gemini Exp 1206",
+            "Gemini Flash Latest",
+            "Gemini Flash Lite Latest",
+            "Gemini Pro Latest",
+            "Gemini 2.5 Flash Lite",
+            "Gemini 2.5 Flash (Image)",
+            "Gemini 2.5 Flash Preview (Default)",
+            "Gemini 2.5 Flash Lite Preview",
+            "Gemini 3 Pro Preview",
+            "Gemini 3 Flash Preview",
+            "Gemini 3 Pro Image Preview",
+            "Gemini Robotics ER 1.5 Preview",
+            "Gemini 2.5 Computer Use Preview",
+            "Gemini Embedding 001",
+            "Imagen 4.0 Generate Preview (06-06)",
+            "Imagen 4.0 Ultra Generate Preview (06-06)",
+            "Imagen 4.0 Generate 001",
+            "Imagen 4.0 Ultra Generate 001",
+            "Imagen 4.0 Fast Generate 001",
+            "Gemini 2.5 Flash Preview (TTS)",
+            "Gemini 2.5 Pro Preview (TTS)",
+            "Gemini 2.5 Flash Native Audio Latest",
+            "Gemini 2.5 Flash Native Audio Preview (09-2025)",
+            "Gemini 2.5 Flash Native Audio Preview (12-2025)",
+            "Gemma 3 1B IT",
+            "Gemma 3 4B IT",
+            "Gemma 3 12B IT",
+            "Gemma 3 27B IT",
+            "Gemma 3N E4B IT",
+            "Gemma 3N E2B IT",
+            "Nano Banana Pro Preview",
+            "Deep Research Pro Preview (12-2025)",
+            "AQA",
+            "Veo 2.0 Generate 001",
+            "Veo 3.0 Generate 001",
+            "Veo 3.0 Fast Generate 001",
+            "Veo 3.1 Generate Preview",
+            "Veo 3.1 Fast Generate Preview"
           ]
         },
         "gemini.latency.debounceMs": {
@@ -782,30 +950,40 @@ class GeminiCoderProvider {
     }
     async handleAddFileContext() {
         const options = {
-            canSelectMany: false,
-            openLabel: 'Select file for context',
+            canSelectMany: true,
+            openLabel: 'Select files for context',
             filters: {
                 'Code Files': ['ts', 'js', 'py', 'json', 'yaml', 'txt', 'md'],
                 'All Files': ['*']
             }
         };
-        const fileUri = await vscode.window.showOpenDialog(options);
-        if (fileUri && fileUri.length > 0) {
-            const uri = fileUri[0];
-            try {
-                const contentBytes = await vscode.workspace.fs.readFile(uri);
-                const content = Buffer.from(contentBytes).toString('utf8');
-                // Context limit check
-                if (content.length > 100000) {
-                    this.sendMessageToWebview('error', `File too large (${content.length} chars). Max recommended size is 100,000 characters for chat context.`);
-                    return;
+        const fileUris = await vscode.window.showOpenDialog(options);
+        if (fileUris && fileUris.length > 0) {
+            let filesAdded = 0;
+            for (const uri of fileUris) {
+                try {
+                    const contentBytes = await vscode.workspace.fs.readFile(uri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    // Context limit check
+                    if (content.length > 100000) {
+                        // Skip large files but don't stop the process
+                        this.sendMessageToWebview('error', `Skipped file ${uri.fsPath.split(/[\/\\]/).pop()} (too large: ${content.length} chars).`);
+                        continue;
+                    }
+                    this.contextFiles.set(uri.fsPath, content);
+                    filesAdded++;
                 }
-                this.contextFiles.set(uri.fsPath, content);
-                this.postViewStatus();
+                catch (e) {
+                    console.error("Failed to read context file:", e);
+                    this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath.split(/[\/\\]/).pop()}`);
+                }
             }
-            catch (e) {
-                console.error("Failed to read context file:", e);
-                this.sendMessageToWebview('error', `Failed to read file: ${uri.fsPath}`);
+            if (filesAdded > 0) {
+                this.postViewStatus();
+                this.sendMessageToWebview('success', `Added ${filesAdded} file(s) to chat context.`);
+            }
+            else if (fileUris.length > 0) {
+                this.sendMessageToWebview('error', `No files were added. Check size limits.`);
             }
         }
     }
@@ -1035,17 +1213,101 @@ class GeminiCoderProvider {
                         <div class="panel-section">
                             <h4>Chat Model Selection</h4>
                             <select id="chat-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
                             <h4>Inline Completion Model</h4>
                             <select id="inline-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
@@ -1118,7 +1380,7 @@ function deactivate() { }
 
 --- START FILE: out\extension.js.map ---
 
-{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
+{"version":3,"file":"extension.js","sourceRoot":"","sources":["../src/extension.ts"],"names":[],"mappings":"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"}
 
 --- END FILE: out\extension.js.map ---
 
@@ -2199,17 +2461,101 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                         <div class="panel-section">
                             <h4>Chat Model Selection</h4>
                             <select id="chat-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
                             <h4>Inline Completion Model</h4>
                             <select id="inline-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">

@@ -603,17 +603,101 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                         <div class="panel-section">
                             <h4>Chat Model Selection</h4>
                             <select id="chat-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
                             <h4>Inline Completion Model</h4>
                             <select id="inline-model-select">
-                                <option value="gemini-2.5-flash" data-desc="Advanced">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-flash-preview-09-2025" data-desc="Basic (Default)">gemini-2.5-flash-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025" data-desc="Lite">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                                <option value="gemini-exp-1206">gemini-exp-1206</option>
+                                <option value="gemini-flash-latest">gemini-flash-latest</option>
+                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+                                <option value="gemini-pro-latest">gemini-pro-latest</option>
+                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
+                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
+                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
+                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
+                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
+                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
+                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
+                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
+                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
+                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
+                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
+                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
+                                <option value="aqa">aqa</option>
+                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
+                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
+                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
+                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
+                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
