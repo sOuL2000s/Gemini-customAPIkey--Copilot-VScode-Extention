@@ -186,6 +186,20 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'removeFileContext':
                     this.handleRemoveFileContext(message.uri);
                     return;
+                case 'sendToGlobalSearch':
+                    // Step 1: Force the Search View to open
+                    await vscode.commands.executeCommand('workbench.view.search');
+
+                    // Step 2: Populate the fields for a Workspace-wide search
+                    await vscode.commands.executeCommand('workbench.action.findInFiles', {
+                        query: message.find,
+                        replace: message.replace,
+                        filesToInclude: '', // Empty string clears the filter and searches ALL files
+                        triggerSearch: true,
+                        preserveCase: true,
+                        useRegularExpression: false
+                    });
+                    return;
             }
         });
     }

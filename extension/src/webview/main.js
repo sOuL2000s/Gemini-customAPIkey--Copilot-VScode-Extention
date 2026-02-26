@@ -289,6 +289,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="replace-block">
                             <pre>${escapeHtml(segment.replace)}</pre>
                             <div class="code-actions">
+                                <button class="action-global-search" 
+                                        data-find="${escapeHtml(segment.find)}" 
+                                        data-replace="${escapeHtml(segment.replace)}">
+                                    Send to Global Search
+                                </button>
                                 <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
                             </div>
                         </div>
@@ -433,6 +438,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // R3: Attach listeners for code action buttons (standard blocks)
     function attachCodeActionListeners() {
         attachCopyListeners(); // Attach copy listeners whenever code actions are attached
+
+        document.querySelectorAll('.action-global-search').forEach(button => {
+            button.onclick = (e) => {
+                const findText = e.currentTarget.getAttribute('data-find');
+                const replaceText = e.currentTarget.getAttribute('data-replace');
+                vscode.postMessage({ 
+                    command: 'sendToGlobalSearch', 
+                    find: findText, 
+                    replace: replaceText 
+                });
+            };
+        });
 
         document.querySelectorAll('.action-insert').forEach(button => {
             button.onclick = (e) => {

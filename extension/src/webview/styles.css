@@ -120,21 +120,28 @@ body {
     filter: brightness(1.2);
 }
 
+/* --- Optimized Code Actions for Narrow Windows --- */
 .code-actions {
     display: flex;
-    gap: 5px;
-    margin-top: 8px;
+    flex-direction: column; /* Stack buttons vertically by default */
+    gap: 6px;
+    padding: 10px;
+    background-color: var(--vscode-editor-background);
 }
 
 .code-actions button {
-    padding: 4px 8px;
+    width: 100%; /* Buttons take full width of the container */
+    padding: 6px 8px;
     cursor: pointer;
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: none;
-    border-radius: 3px;
-    font-size: 11px;
-    white-space: nowrap; /* Prevent button labels from wrapping */
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    white-space: normal; /* Allow text to wrap if the sidebar is extremely thin */
+    word-wrap: break-word;
     transition: background-color 0.2s;
 }
 
@@ -142,13 +149,27 @@ body {
     background-color: var(--vscode-button-hoverBackground);
 }
 
+/* On wider sidebars, allow them to sit side-by-side if you prefer */
+@media (min-width: 300px) {
+    .code-actions {
+        flex-direction: row; /* Switch back to side-by-side on larger widths */
+        flex-wrap: wrap;
+    }
+    .code-actions button {
+        flex: 1; /* Equal width buttons */
+        width: auto;
+    }
+}
+
 
 /* --- FIND/REPLACE Specific Styling --- */
 .code-diff-block {
-    margin: 15px 0;
+    margin: 12px 0;
     border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 6px;
+    border-radius: 4px;
     overflow: hidden;
+    width: 100%;
+    box-sizing: border-box; /* Crucial for responsiveness */
     background-color: var(--vscode-editor-background);
 }
 
@@ -157,6 +178,13 @@ body {
     color: var(--vscode-sideBarSectionHeader-foreground);
     border-top: 1px solid var(--vscode-editorGroup-border);
     border-bottom: none; /* Let the next block handle separation */
+    padding: 4px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 .diff-header:first-child {
     border-top: none;
@@ -179,13 +207,14 @@ body {
 
 .find-block pre, .replace-block pre {
     /* Reset padding/margins for PRE tags inside blocks */
-    margin: 10px 0; 
-    padding: 0;
-    white-space: pre-wrap; /* Ensure text wraps */
+    margin: 0;
+    padding: 8px;
+    font-size: 11px; /* Slightly smaller font for dense sidebars */
+    line-height: 1.4;
+    overflow-x: auto; /* Allow horizontal scrolling inside the code block */
+    white-space: pre; /* Maintain code formatting */
     word-break: break-all;
     font-family: var(--vscode-editor-font-family, monospace);
-    font-size: var(--vscode-editor-font-size, 13px);
-    overflow-x: auto;
 }
 
 .replace-block .code-actions {
@@ -214,8 +243,9 @@ body {
     background-color: var(--vscode-inputBackground);
     border: 1px solid var(--vscode-input-border);
     border-radius: 4px;
-    padding: 5px 8px;
+    padding: 4px;
     gap: 5px;
+    flex-wrap: wrap; /* Allow icons to wrap if window is tiny */
 }
 /* 4. Highlight context header when key is missing to prompt action */
 #context-header.key-missing {
@@ -268,14 +298,17 @@ body {
 
 /* 1. Styling for the active file indicator */
 #active-file-indicator {
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 500;
     color: var(--vscode-list-activeSelectionForeground);
     background-color: var(--vscode-list-activeSelectionBackground);
-    padding: 3px 6px;
+    padding: 2px 5px;
     border-radius: 3px;
     white-space: nowrap;
     display: none; /* Hidden by default, shown via JS */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis; /* If filename is too long, show ... */
 }
 
 #context-file-list {
@@ -461,20 +494,21 @@ body {
     background-color: var(--vscode-inputBackground);
     border: 1px solid var(--vscode-input-border); /* Added border to make it look like a cohesive input area */
     border-radius: 4px;
-    padding: 5px;
+    padding: 4px;
+    gap: 4px;
 }
 
 #prompt-input {
     flex-grow: 1;
     resize: none;
-    padding: 5px 10px;
+    padding: 4px 8px;
     border: none;
     background-color: transparent;
     color: var(--vscode-inputForeground);
     min-height: 24px;
     max-height: 200px;
     line-height: 1.4;
-    font-size: 13px;
+    font-size: 12px; /* Smaller text for narrow view */
 }
 #prompt-input:focus {
     outline: none;
@@ -526,6 +560,22 @@ body {
     color: var(--vscode-button-secondaryForeground);
     cursor: default;
     opacity: 0.5;
+}
+
+.action-global-search {
+    background-color: var(--vscode-statusBarItem-remoteBackground, var(--vscode-button-secondaryBackground)) !important;
+    color: var(--vscode-statusBarItem-remoteForeground, var(--vscode-button-secondaryForeground)) !important;
+    border: 1px solid var(--vscode-button-border, transparent) !important;
+}
+
+/* Hover effect for better UX */
+.action-global-search:hover {
+    filter: brightness(1.1);
+}
+
+/* Ensure the replacement block actions are spaced nicely */
+.replace-block .code-actions {
+    padding: 10px;
 }
 
 /* R4: Inline Command Palette Styling */
