@@ -1,3 +1,8 @@
-<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#ffffff" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+  <!-- A stylized 'G' shape formed by a partial square and a line segment -->
+  <path d="M15 7H9C7.89543 7 7 7.89543 7 9V15C7 16.1046 7.89543 17 9 17H15C16.1046 17 17 16.1046 17 15V9C17 7.89543 16.1046 7 15 7Z" opacity="0.1"/>
+  <!-- The main 'G' path, designed to be simple and recognizable at small sizes -->
+  <path d="M15 10H10V8H9V14H10V12H15V14H16V10C16 8.89543 15.1046 8 14 8H9C7.89543 8 7 8.89543 7 10V14C7 15.1046 7.89543 16 9 16H14C15.1046 16 16 15.1046 16 14V12" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- A small vertical line to act as a blinking cursor or indicator -->
+  <path d="M12 16L12 18" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
 </svg>
