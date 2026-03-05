@@ -1,11 +1,10 @@
+// src/extension.ts
+
 import * as vscode from 'vscode';
 import { GoogleGenAI } from '@google/genai';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
-import { SecretStorageManager } from './SecretStorageManager'; // NEW IMPORT
-
-// --- Configuration ---
-// Removed GEMINI_CHAT_MODEL constant, now read from config
+import { SecretStorageManager } from './SecretStorageManager';
 
 /**
  * Utility function to generate a nonce for CSP.
@@ -35,7 +34,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly secretManager: SecretStorageManager // NEW DEPENDENCY
+        private readonly secretManager: SecretStorageManager
     ) {
         this.chatModel = ConfigurationManager.getChatModel(); // Initialize model
         this.updateActiveFile(); // 1. Initial file check
@@ -199,6 +198,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                         preserveCase: true,
                         useRegularExpression: false
                     });
+                    return;
+                case 'applyFindReplace': // NEW: Handle direct find/replace in active file
+                    this.handleApplyFindReplace(message.find, message.replace);
                     return;
             }
         });
@@ -511,6 +513,179 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Handles searching for a string in the active editor and replacing it with another.
+     */
+    private async handleApplyFindReplace(findText: string, replaceText: string) {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            this.sendMessageToWebview('error', 'No active text editor found to apply changes.');
+            return;
+        }
+
+        const document = editor.document;
+        // CRITICAL FIX: Normalize newlines in both document content and findText
+        // to ensure consistent matching, regardless of OS or editor settings.
+        // Retrieve the document content. VS Code's `document.getText()` is internally LF-normalized,
+        // and `document.positionAt()` expects LF-based offsets.
+        const documentContent = document.getText();
+
+        // Normalize the AI's find/replace blocks to LF to ensure consistency with `documentContent`.
+        const findTextLF = findText.replace(/\r\n/g, '\n');
+        const replaceTextLF = replaceText.replace(/\r\n/g, '\n');
+        
+        // Add debug logs as requested by the user
+        console.log("DEBUG: Attempting to apply Find/Replace...");
+        console.log("FIND BLOCK (LF normalized):");
+        console.log(JSON.stringify(findTextLF));
+        console.log("REPLACE BLOCK (LF normalized):");
+        console.log(JSON.stringify(replaceTextLF));
+        console.log("DOCUMENT CONTENT SAMPLE (first 500 chars, LF normalized):");
+        console.log(JSON.stringify(documentContent.slice(0, 500)));
+
+        let editApplied = false;
+
+        try {
+            // New: Use the robust findMatchingRange helper which implements the 3-step strategy
+            const matchResult = await this.findMatchingRange(document, findTextLF);
+
+            if (matchResult) {
+                await editor.edit(editBuilder => {
+                    console.log(`DEBUG: Found match using strategy, replacing range: ${matchResult.range.start.line}:${matchResult.range.start.character} - ${matchResult.range.end.line}:${matchResult.range.end.character}`);
+                    console.log("DEBUG: Found text in document to replace:");
+                    console.log(JSON.stringify(matchResult.foundMatchText));
+
+                    // Use the exact text found in the document for the replacement range
+                    editBuilder.replace(matchResult.range, replaceTextLF);
+                    editApplied = true;
+                });
+            }
+
+            if (editApplied) {
+                this.sendMessageToWebview('success', `Applied ${findText.split('\n').length > 1 ? 'block' : `'${findText}'`} replacement in active file.`);
+            } else {
+                // Improved error message to guide the user on exact matching
+                this.sendMessageToWebview('error', `No occurrences of the 'FIND' block found in the active file. Ensure the text matches exactly, including indentation and newlines.`);
+            }
+
+        } catch (e) {
+            console.error('Failed to apply find/replace:', e);
+            this.sendMessageToWebview('error', `Failed to apply changes: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    /**
+     * Helper method to find a matching range in the document using a 3-step strategy:
+     * 1. Exact Match
+     * 2. Normalized Match (trimming leading/trailing whitespace from each line)
+     * 3. First-line Anchor Search + simple bracket/parenthesis/brace matching
+     */
+    private async findMatchingRange(document: vscode.TextDocument, findTextLF: string): Promise<{ range: vscode.Range, foundMatchText: string } | null> {
+        const documentContent = document.getText();
+        const documentLines = documentContent.split('\n');
+        const findLines = findTextLF.split('\n');
+
+        // Strategy 1: Exact Match
+        let startIndex = documentContent.indexOf(findTextLF);
+        if (startIndex !== -1) {
+            const endIndex = startIndex + findTextLF.length;
+            console.log("DEBUG: Matched using Strategy 1 (Exact Match).");
+            return {
+                range: new vscode.Range(document.positionAt(startIndex), document.positionAt(endIndex)),
+                foundMatchText: findTextLF
+            };
+        }
+        console.log("DEBUG: Strategy 1 (Exact Match) failed.");
+
+        // Strategy 2: Normalized Match (ignore all leading/trailing whitespace per line for comparison)
+        const findLinesTrimmed = findLines.map(line => line.trim());
+
+        if (findLinesTrimmed.length > 0 && findLinesTrimmed.join('').trim().length > 0) { // Only attempt if there's non-empty content to find
+            for (let i = 0; i <= documentLines.length - findLinesTrimmed.length; i++) {
+                let match = true;
+                let foundBlockLines: string[] = [];
+                for (let j = 0; j < findLinesTrimmed.length; j++) {
+                    if (i + j >= documentLines.length || documentLines[i + j].trim() !== findLinesTrimmed[j]) {
+                        match = false;
+                        break;
+                    }
+                    foundBlockLines.push(documentLines[i + j]);
+                }
+                if (match) {
+                    // Reconstruct the found block from original document lines to get accurate range
+                    const blockStartIndex = document.offsetAt(new vscode.Position(i, 0));
+                    // The end of the range is inclusive of the last character of the last line
+                    const blockEndIndex = document.offsetAt(new vscode.Position(i + findLinesTrimmed.length - 1, documentLines[i + findLinesTrimmed.length - 1].length));
+                    console.log("DEBUG: Matched using Strategy 2 (Normalized Match).");
+                    return {
+                        range: new vscode.Range(document.positionAt(blockStartIndex), document.positionAt(blockEndIndex)),
+                        foundMatchText: foundBlockLines.join('\n')
+                    };
+                }
+            }
+        }
+        console.log("DEBUG: Strategy 2 (Normalized Match) failed.");
+
+        // Strategy 3: First-line Anchor Search + simple bracket/parenthesis/brace matching
+        // This is primarily for finding code blocks that start with an identifier and end with a structural element.
+        // It's a heuristic and might not work for all code structures.
+        const firstFindMeaningfulLine = findLines.find(line => line.trim().length > 0);
+        
+        if (firstFindMeaningfulLine) {
+            const firstFindLineTrimmed = firstFindMeaningfulLine.trim();
+
+            for (let i = 0; i < documentLines.length; i++) {
+                // Look for the first trimmed line of the find block within the document lines
+                if (documentLines[i].trim().startsWith(firstFindLineTrimmed)) {
+                    // Potential start line found. Now attempt to find the end using bracket matching.
+                    let openBracketCount = 0; // For (), [], {}
+                    let blockEndLineIndex = -1;
+                    let potentialFoundTextLines: string[] = [];
+
+                    for (let k = i; k < documentLines.length; k++) {
+                        const line = documentLines[k];
+                        potentialFoundTextLines.push(line);
+
+                        for (const char of line) {
+                            if (char === '(' || char === '[' || char === '{') {
+                                openBracketCount++;
+                            } else if (char === ')' || char === ']' || char === '}') {
+                                openBracketCount--;
+                            }
+                        }
+
+                        // We consider the block closed if brackets are balanced, and we've processed more than just the start line.
+                        if (openBracketCount <= 0 && k > i) { 
+                            blockEndLineIndex = k;
+                            break;
+                        }
+                    }
+
+                    if (blockEndLineIndex !== -1) {
+                        const foundBlockText = potentialFoundTextLines.join('\n');
+                        
+                        // Verify if this structurally found block's normalized content matches the findTextLF's normalized content
+                        const normalizedFoundBlock = foundBlockText.split('\n').map(l => l.trim()).join('\n').trim();
+                        const normalizedFindText = findTextLF.split('\n').map(l => l.trim()).join('\n').trim();
+
+                        if (normalizedFoundBlock === normalizedFindText) {
+                            const blockStartIndex = document.offsetAt(new vscode.Position(i, 0));
+                            const blockEndIndex = document.offsetAt(new vscode.Position(blockEndLineIndex, documentLines[blockEndLineIndex].length));
+                            console.log("DEBUG: Matched using Strategy 3 (First-line Anchor + Bracket Matching).");
+                            return {
+                                range: new vscode.Range(document.positionAt(blockStartIndex), document.positionAt(blockEndIndex)),
+                                foundMatchText: foundBlockText
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        console.log("DEBUG: Strategy 3 (First-line Anchor + Bracket Matching) failed.");
+
+        return null;
+    }
+
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js'));
@@ -624,44 +799,21 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                 <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
                                 <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
                                 <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                                <option value="gemini-exp-1206">gemini-exp-1206</option>
                                 <option value="gemini-flash-latest">gemini-flash-latest</option>
                                 <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
                                 <option value="gemini-pro-latest">gemini-pro-latest</option>
                                 <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
                                 <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
                                 <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
                                 <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
                                 <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                                <option value="gemini-3.1-pro-preview-customtools">gemini-3.1-pro-preview-customtools</option>
+                                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
                                 <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
                                 <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
                                 <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
-                                <option value="gemini-embedding-001">gemini-embedding-001</option>
-                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
-                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
-                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
-                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
-                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
-                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
-                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
-                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
-                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
-                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
-                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
-                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
-                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
-                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
-                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
-                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
-                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
-                                <option value="aqa">aqa</option>
-                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
-                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
-                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
-                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
-                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">
@@ -674,44 +826,21 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                 <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
                                 <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
                                 <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                                <option value="gemini-exp-1206">gemini-exp-1206</option>
                                 <option value="gemini-flash-latest">gemini-flash-latest</option>
                                 <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
                                 <option value="gemini-pro-latest">gemini-pro-latest</option>
                                 <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
                                 <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                <option value="gemini-2.5-flash-preview-09-2025">gemini-2.5-flash-preview-09-2025</option>
                                 <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
                                 <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
                                 <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                                <option value="gemini-3.1-pro-preview-customtools">gemini-3.1-pro-preview-customtools</option>
+                                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
                                 <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
                                 <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
                                 <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
-                                <option value="gemini-embedding-001">gemini-embedding-001</option>
-                                <option value="imagen-4.0-generate-preview-06-06">imagen-4.0-generate-preview-06-06</option>
-                                <option value="imagen-4.0-ultra-generate-preview-06-06">imagen-4.0-ultra-generate-preview-06-06</option>
-                                <option value="imagen-4.0-generate-001">imagen-4.0-generate-001</option>
-                                <option value="imagen-4.0-ultra-generate-001">imagen-4.0-ultra-generate-001</option>
-                                <option value="imagen-4.0-fast-generate-001">imagen-4.0-fast-generate-001</option>
-                                <option value="gemini-2.5-flash-preview-tts">gemini-2.5-flash-preview-tts</option>
-                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-preview-tts</option>
-                                <option value="gemini-2.5-flash-native-audio-latest">gemini-2.5-flash-native-audio-latest</option>
-                                <option value="gemini-2.5-flash-native-audio-preview-09-2025">gemini-2.5-flash-native-audio-preview-09-2025</option>
-                                <option value="gemini-2.5-flash-native-audio-preview-12-2025">gemini-2.5-flash-native-audio-preview-12-2025</option>
-                                <option value="gemma-3-1b-it">gemma-3-1b-it</option>
-                                <option value="gemma-3-4b-it">gemma-3-4b-it</option>
-                                <option value="gemma-3-12b-it">gemma-3-12b-it</option>
-                                <option value="gemma-3-27b-it">gemma-3-27b-it</option>
-                                <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
-                                <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
-                                <option value="nano-banana-pro-preview">nano-banana-pro-preview</option>
-                                <option value="deep-research-pro-preview-12-2025">deep-research-pro-preview-12-2025</option>
-                                <option value="aqa">aqa</option>
-                                <option value="veo-2.0-generate-001">veo-2.0-generate-001</option>
-                                <option value="veo-3.0-generate-001">veo-3.0-generate-001</option>
-                                <option value="veo-3.0-fast-generate-001">veo-3.0-fast-generate-001</option>
-                                <option value="veo-3.1-generate-preview">veo-3.1-generate-preview</option>
-                                <option value="veo-3.1-fast-generate-preview">veo-3.1-fast-generate-preview</option>
                             </select>
                         </div>
                         <div class="panel-section">

@@ -149,6 +149,17 @@ body {
     background-color: var(--vscode-button-hoverBackground);
 }
 
+/* Specific styling for the new "Apply to Active File" button */
+.action-apply-to-active {
+    background-color: var(--vscode-statusBarItem-prominentBackground) !important;
+    color: var(--vscode-statusBarItem-prominentForeground) !important;
+    font-weight: 500 !important;
+}
+
+.action-apply-to-active:hover {
+    filter: brightness(1.1);
+}
+
 /* On wider sidebars, allow them to sit side-by-side if you prefer */
 @media (min-width: 300px) {
     .code-actions {

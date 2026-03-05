@@ -257,8 +257,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 responseSegments.push({ type: 'text', content: responseText.substring(lastIndex, match.index) });
             }
             
-            const findContent = match[1].trim();
-            const replaceContent = match[2].trim();
+            // CRITICAL FIX: Do NOT trim findContent and replaceContent.
+            // This ensures all whitespace, including leading/trailing newlines and indentation,
+            // is preserved for exact matching in the editor.
+            const findContent = match[1];
+            const replaceContent = match[2];
             
             responseSegments.push({ type: 'findReplace', find: findContent, replace: replaceContent });
             lastIndex = match.index + match[0].length;
@@ -293,6 +296,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                         data-find="${escapeHtml(segment.find)}" 
                                         data-replace="${escapeHtml(segment.replace)}">
                                     Send to Global Search
+                                </button>
+                                <button class="action-apply-to-active" 
+                                        data-find="${escapeHtml(segment.find)}" 
+                                        data-replace="${escapeHtml(segment.replace)}" 
+                                        title="Search and replace in active editor">
+                                    Apply to Active File
                                 </button>
                                 <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
                             </div>
@@ -448,6 +457,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     find: findText, 
                     replace: replaceText 
                 });
+            };
+        });
+
+        // NEW: Listener for "Apply to Active File" button
+        document.querySelectorAll('.action-apply-to-active').forEach(button => {
+            button.onclick = (e) => {
+                const findText = e.currentTarget.getAttribute('data-find');
+                const replaceText = e.currentTarget.getAttribute('data-replace');
+                if (findText !== null && replaceText !== null) { // Ensure they are not null
+                    vscode.postMessage({ 
+                        command: 'applyFindReplace', 
+                        find: findText, 
+                        replace: replaceText 
+                    });
+                } else {
+                    vscode.postMessage({ command: 'error', content: 'Missing find or replace content for action.' });
+                }
             };
         });
 
