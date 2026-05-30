@@ -2,7 +2,7 @@
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
   "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
-  "version": "3.6.0",
+  "version": "3.6.1",
   "publisher": "Souparna Paul",
   "license": "MIT",
   "repository": {

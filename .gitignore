@@ -32,7 +32,6 @@ extension/out/
 # Dependency lock files
 # We ignore the lock file because we only provide requirements.txt (Python) 
 # and package.json (Node) for simple setup.
-extension/package-lock.json
 
 # -------------------------
 # VS CODE
