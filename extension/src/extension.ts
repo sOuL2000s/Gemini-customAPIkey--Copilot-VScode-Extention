@@ -385,7 +385,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     }
     
     private async handlePromptSubmission(userPrompt: string) {
-        if (!this._view || !this.apiAgent) { return; }
+        if (!this._view) return;
 
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -396,85 +396,95 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         const document = editor.document;
         const selectedText = document.getText(editor.selection);
         const languageId = document.languageId;
-        const fullDocumentContent = document.getText(); // Get full content of the active file
+        const fullDocumentContent = document.getText();
 
         this.sendMessageToWebview('loading', 'Thinking...');
 
-        try {
-            let contextBlock = '';
-            
-            // 1. Inject the currently open file content as primary context
-            contextBlock += `\n--- ACTIVE FILE CONTEXT: ${document.fileName} ---\n${fullDocumentContent}\n--- END ACTIVE FILE CONTEXT ---\n`;
+        let attempts = 0;
+        const maxAttempts = (await this.secretManager.getAllKeyNames()).length || 1;
 
-            // 2. Inject manually added files (external context)
-            if (this.contextFiles.size > 0) {
-                for (const [path, content] of this.contextFiles.entries()) {
-                    // Skip if the context file is the active file (to avoid duplication)
-                    if (path === document.uri.fsPath) continue; 
+        while (attempts < maxAttempts) {
+            if (!this.apiAgent) {
+                await this.initializeApiAgent();
+                if (!this.apiAgent) {
+                    this.sendMessageToWebview('error', 'No active API Key found. Please add one in settings.');
+                    return;
+                }
+            }
+
+            try {
+                let contextBlock = '';
+                contextBlock += `\n--- ACTIVE FILE CONTEXT: ${document.fileName} ---\n${fullDocumentContent}\n--- END ACTIVE FILE CONTEXT ---\n`;
+
+                if (this.contextFiles.size > 0) {
+                    for (const [path, content] of this.contextFiles.entries()) {
+                        if (path === document.uri.fsPath) continue; 
+                        contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
+                    }
+                }
+
+                const systemInstruction = `
+                    You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
+                    Your goal is to assist the user with code modification, generation, debugging, and refactoring.
+                    ${contextBlock}
                     
-                    contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
+                    CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
+                    DO NOT use conversational filler, explanations, or commentary outside of these structures.
+                    
+                    1. For code modifications (deletion, replacement, or insertion within existing code):
+                    
+                    --- FIND ---
+                    
+                    \`\`\`${languageId}
+                    
+                    \`\`\`
+                    
+                    --- REPLACE ---
+                    
+                    \`\`\`${languageId}
+                    
+                    \`\`\`
+                    
+                    2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
+                `;
+
+                const userContent = `
+                    --- Selected Code Context ---
+                    ${selectedText ? selectedText : 'No code selected.'}
+                    --- End Selected Code Context ---
+                    
+                    User's Request: ${userPrompt}
+                `;
+
+                const response = await this.apiAgent.models.generateContent({
+                    model: this.chatModel,
+                    contents: userContent,
+                    config: { systemInstruction: systemInstruction }
+                });
+                
+                if (response && response.text) {
+                    this.sendMessageToWebview('response', response.text);
+                    return; // Success
+                } else {
+                    throw new Error('Empty response from API.');
+                }
+            } catch (error: any) {
+                attempts++;
+                const currentKey = this.secretManager.getActiveKeyName() || '';
+                const nextKey = await this.secretManager.getNextKeyName(currentKey);
+
+                if (nextKey && attempts < maxAttempts) {
+                    console.warn(`API Key '${currentKey}' failed. Auto-switching to '${nextKey}'...`);
+                    this.sendMessageToWebview('loading', `Key failed. Auto-switching to '${nextKey}' (Attempt ${attempts + 1}/${maxAttempts})...`);
+                    await this.secretManager.setActiveKeyName(nextKey);
+                    await this.initializeApiAgent();
+                } else {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('API Call Failed after all attempts:', errorMessage);
+                    this.sendMessageToWebview('error', `Gemini API Error: ${errorMessage}`);
+                    return;
                 }
             }
-
-            // System instruction enforces the requested chat output format (Find/Replace blocks)
-            const systemInstruction = `
-                You are an expert Senior Software Engineer specializing in ${languageId}. Your function is strictly that of a code editor, not a tutor.
-                Your goal is to assist the user with code modification, generation, debugging, and refactoring.
-                ${contextBlock}
-                
-                CRITICAL CONSTRAINT: You MUST provide all code modifications and additions using one of the two strict formats below.
-                DO NOT use conversational filler, explanations, or commentary outside of these structures.
-                
-                1. For code modifications (deletion, replacement, or insertion within existing code):
-                
-                --- FIND ---
-                
-                \`\`\`${languageId}
-                
-                \`\`\`
-                
-                --- REPLACE ---
-                
-                \`\`\`${languageId}
-                
-                \`\`\`
-                
-                2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
-            `;
-
-            const userContent = `
-                --- Selected Code Context ---
-                ${selectedText ? selectedText : 'No code selected.'}
-                --- End Selected Code Context ---
-                
-                User's Request: ${userPrompt}
-            `;
-
-            const response = await this.apiAgent.models.generateContent({
-                model: this.chatModel,
-                contents: userContent,
-                config: {
-                    systemInstruction: systemInstruction
-                }
-            });
-            
-            if (response && response.text) {
-                // Since we removed in-editor editing, send the response directly to the chat view
-                this.sendMessageToWebview('response', response.text);
-            } else {
-                this.sendMessageToWebview('error', 'Received an empty or malformed response from the Gemini API.');
-            }
-        } catch (error) {
-            // Refactoring Change #5: Improved Error Handling
-            let errorMessage: string;
-            if (error instanceof Error) {
-                errorMessage = error.message ?? 'Unknown API Error occurred.';
-            } else {
-                errorMessage = String(error);
-            }
-            
-            console.error('API Call Failed:', errorMessage);
-            this.sendMessageToWebview('error', `Gemini API Error: Check your API key or network connection. Error: ${errorMessage}`);
         }
     }
     
@@ -774,6 +784,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     <!-- NEW: Key Management Panel -->
                     <div id="key-management-panel" style="display: none;">
                         <div class="panel-section">
+                            <button class="panel-close-button" title="Close Panel">&times;</button>
                             <h4>Active Key Selection</h4>
                             <ul id="key-list">
                                 <!-- Key buttons loaded here -->
@@ -790,57 +801,26 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     <!-- NEW: Settings Panel -->
                     <div id="settings-panel" style="display: none;">
                         <div class="panel-section">
+                            <button class="panel-close-button" title="Close Panel">&times;</button>
                             <h4>Chat Model Selection</h4>
                             <select id="chat-model-select">
-                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
-                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
-                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
-                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                                <option value="gemini-flash-latest">gemini-flash-latest</option>
-                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
-                                <option value="gemini-pro-latest">gemini-pro-latest</option>
-                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
-                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
-                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                                <option value="gemini-3.1-pro-preview-customtools">gemini-3.1-pro-preview-customtools</option>
-                                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
-                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
-                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
+                                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+                                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                             </select>
                         </div>
                         <div class="panel-section">
                             <h4>Inline Completion Model</h4>
                             <select id="inline-model-select">
-                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
-                                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
-                                <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
-                                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                                <option value="gemini-flash-latest">gemini-flash-latest</option>
-                                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
-                                <option value="gemini-pro-latest">gemini-pro-latest</option>
-                                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
-                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                <option value="gemini-2.5-flash-lite-preview-09-2025">gemini-2.5-flash-lite-preview-09-2025</option>
-                                <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                                <option value="gemini-3.1-pro-preview-customtools">gemini-3.1-pro-preview-customtools</option>
-                                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
-                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                                <option value="gemini-robotics-er-1.5-preview">gemini-robotics-er-1.5-preview</option>
-                                <option value="gemini-2.5-computer-use-preview-10-2025">gemini-2.5-computer-use-preview-10-2025</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
+                                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+                                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                             </select>
                         </div>
                         <div class="panel-section">

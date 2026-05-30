@@ -52,3 +52,5 @@ extension/package-lock.json
 # -------------------------
 .DS_Store
 Thumbs.db
+
+combined_project_files.txt

@@ -49,66 +49,64 @@ export class GeminiInlineCompletionProvider implements vscode.InlineCompletionIt
         token: vscode.CancellationToken
     ): Promise<vscode.InlineCompletionItem[] | null | undefined> {
 
-        if (!this.apiAgent || token.isCancellationRequested) {
-            return null;
-        }
+        if (token.isCancellationRequested) return null;
         
-        // 1. Context Extraction and Prompt Generation
         const prompt = this.createCodeAwarePrompt(document, position);
-        if (!prompt) {
-             return null;
-        }
+        if (!prompt) return null;
 
-        // 2. Debounce and Execute API Call
-        const completionText = await this.debounceController.schedule(async (cancellationToken) => {
-            
-            if (cancellationToken.isCancellationRequested) {
-                return undefined; 
+        return await this.debounceController.schedule(async (cancellationToken) => {
+            if (cancellationToken.isCancellationRequested) return undefined;
+
+            let attempts = 0;
+            const keyNames = await this.secretManager.getAllKeyNames();
+            const maxAttempts = keyNames.length || 1;
+
+            while (attempts < maxAttempts) {
+                if (!this.apiAgent) {
+                    await this.initializeApiAgent();
+                    if (!this.apiAgent) return undefined;
+                }
+
+                try {
+                    const response = await this.apiAgent!.models.generateContent({
+                        model: this.model,
+                        contents: prompt,
+                    });
+                    
+                    const rawSuggestion = (response.text || '').trim();
+                    const lineSuffix = document.getText(new vscode.Range(position, document.lineAt(position.line).range.end));
+                    let finalSuggestion = rawSuggestion.trimStart();
+                    
+                    if (lineSuffix && finalSuggestion.startsWith(lineSuffix)) {
+                        finalSuggestion = finalSuggestion.substring(lineSuffix.length);
+                    }
+
+                    if (!finalSuggestion.trim()) return undefined;
+                    
+                    const item = new vscode.InlineCompletionItem(finalSuggestion);
+                    item.range = new vscode.Range(position, position); 
+                    return [item] as any; // Cast for debounce controller compatibility
+
+                } catch (e) {
+                    attempts++;
+                    const currentKey = this.secretManager.getActiveKeyName() || '';
+                    const nextKey = await this.secretManager.getNextKeyName(currentKey);
+
+                    if (nextKey && attempts < maxAttempts) {
+                        console.warn(`Inline Key '${currentKey}' failed. Switching to '${nextKey}'...`);
+                        await this.secretManager.setActiveKeyName(nextKey);
+                        await this.initializeApiAgent();
+                        // Continue loop with new agent
+                    } else {
+                        if (!cancellationToken.isCancellationRequested) {
+                            console.error("Gemini Inline API failed after all attempts:", e);
+                        }
+                        return undefined;
+                    }
+                }
             }
-
-            try {
-                const response = await this.apiAgent!.models.generateContent({
-                    model: this.model,
-                    contents: prompt,
-                });
-                
-                // --- Refactoring Change #1 & #2: Removed extractRawCode, relying on prompt ---
-                const rawSuggestion = (response.text || '').trim();
-
-                // 3. Calculate relevant insertion text (handling line suffixes)
-                const lineSuffix = document.getText(new vscode.Range(position, document.lineAt(position.line).range.end));
-                
-                let finalSuggestion = rawSuggestion.trimStart();
-                
-                // Remove the line suffix if the suggestion starts with it
-                if (lineSuffix && finalSuggestion.startsWith(lineSuffix)) {
-                    finalSuggestion = finalSuggestion.substring(lineSuffix.length);
-                }
-
-                if (!finalSuggestion.trim()) {
-                    return undefined;
-                }
-                
-                return finalSuggestion;
-
-            } catch (e) {
-                if (!cancellationToken.isCancellationRequested) {
-                    console.error("Gemini Inline API call failed:", e);
-                }
-                return undefined;
-            }
-        });
-
-        if (!completionText) {
-            return null;
-        }
-
-        // 4. Return Inline Completion Item
-        const item = new vscode.InlineCompletionItem(completionText);
-        // Correctly set range for pure insertion at cursor position
-        item.range = new vscode.Range(position, position); 
-
-        return [item];
+            return undefined;
+        }) as any;
     }
     
     private createCodeAwarePrompt(document: vscode.TextDocument, position: vscode.Position): string | null {

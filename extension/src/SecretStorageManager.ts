@@ -127,8 +127,26 @@ export class SecretStorageManager {
     public async getActiveApiKey(): Promise<string | undefined> {
         const activeName = this.getActiveKeyName();
         if (!activeName) {
-             return undefined;
+            // If no active name set, try to pick the first available one
+            const allNames = await this.getAllKeyNames();
+            if (allNames.length > 0) {
+                await this.setActiveKeyName(allNames[0]);
+                return this.getApiKey(allNames[0]);
+            }
+            return undefined;
         }
         return this.getApiKey(activeName);
+    }
+
+    /**
+     * Finds the next available API key name for failover.
+     */
+    public async getNextKeyName(currentName: string): Promise<string | undefined> {
+        const allNames = await this.getAllKeyNames();
+        if (allNames.length <= 1) return undefined;
+        
+        const currentIndex = allNames.indexOf(currentName);
+        const nextIndex = (currentIndex + 1) % allNames.length;
+        return allNames[nextIndex];
     }
 }

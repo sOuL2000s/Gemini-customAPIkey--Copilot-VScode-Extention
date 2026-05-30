@@ -84,38 +84,50 @@ document.addEventListener('DOMContentLoaded', () => {
         postMessage('newChat');
     });
 
+    const updateToggleStates = () => {
+        keyManagementToggle.classList.toggle('active', keyManagementPanel.style.display === 'flex');
+        settingsToggle.classList.toggle('active', settingsPanel.style.display === 'flex');
+    };
+
     // R6: Key Management Toggle
     keyManagementToggle.addEventListener('click', () => {
-        const isHidden = keyManagementPanel.style.display === 'none' || !keyManagementPanel.style.display;
+        const isCurrentlyVisible = keyManagementPanel.style.display === 'flex';
         
-        // Hide settings panel if it was open
         settingsPanel.style.display = 'none';
         
-        if (isHidden) {
-            // Request fresh list whenever the panel is opened
+        if (!isCurrentlyVisible) {
             postMessage('requestKeyManagementDetails');
+            keyManagementPanel.style.display = 'flex';
+        } else {
+            keyManagementPanel.style.display = 'none';
         }
-        keyManagementPanel.style.display = isHidden ? 'flex' : 'none';
-        
-        // Hide palette if active
+        updateToggleStates();
         togglePalette(false);
     });
 
     // NEW: Settings Toggle
     settingsToggle.addEventListener('click', () => {
-        const isHidden = settingsPanel.style.display === 'none' || !settingsPanel.style.display;
+        const isCurrentlyVisible = settingsPanel.style.display === 'flex';
         
-        // Hide key management panel if it was open
         keyManagementPanel.style.display = 'none';
 
-        if (isHidden) {
-            // Request current configuration data whenever the panel is opened
+        if (!isCurrentlyVisible) {
             postMessage('requestSettingsDetails');
+            settingsPanel.style.display = 'flex';
+        } else {
+            settingsPanel.style.display = 'none';
         }
-        settingsPanel.style.display = isHidden ? 'flex' : 'none';
-
-        // Hide palette if active
+        updateToggleStates();
         togglePalette(false);
+    });
+
+    // Handle close buttons inside panels
+    document.querySelectorAll('.panel-close-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            keyManagementPanel.style.display = 'none';
+            settingsPanel.style.display = 'none';
+            updateToggleStates();
+        });
     });
     
     // NEW: Settings Change Listeners
@@ -567,12 +579,14 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.scrollTop = chatHistory.scrollHeight;
         
         // Auto-resize prompt input area 
-        promptInput.style.height = 'auto';
-        promptInput.style.height = (promptInput.scrollHeight) + 'px';
+        promptInput.style.height = '28px';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 250) + 'px';
     });
     
     // Initial auto-resize setup and listener
     promptInput.addEventListener('input', () => {
+        promptInput.style.height = '28px';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 250) + 'px';
         // Check for quick trigger: #/@ followed by optional whitespace
         const value = promptInput.value.trim();
         if (value.startsWith('#/@')) {

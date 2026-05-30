@@ -11,7 +11,7 @@ export class ConfigurationManager {
     public static getChatModel(): string {
         const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
         // Default matches the one defined in package.json
-        return config.get<string>('chatModel') || "gemini-2.5-flash-preview-09-2025";
+        return config.get<string>('chatModel') || "gemini-2.5-flash";
     }
 
     /**
