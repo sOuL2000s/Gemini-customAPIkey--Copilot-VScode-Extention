@@ -37,13 +37,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # Specifies Node.js version 18 (an LTS version).
-          # You can change this to '20' or 'lts/*' based on your project's needs.
-          node-version: '18'
-          # Caches npm dependencies to speed up subsequent workflow runs.
-          # The cache-dependency-path must point to the package-lock.json *inside* your extension folder.
+          # Specifies Node.js version 20 (an LTS version) to meet dependency requirements.
+          # You could also use '22' or 'lts/*' for the latest LTS.
+          node-version: '20' # <--- CHANGE THIS FROM '18' TO '20'
           cache: 'npm'
-          cache-dependency-path: 'extension/package-lock.json' # <--- IMPORTANT CHANGE HERE
+          cache-dependency-path: 'extension/package-lock.json'
 
       # Step 3: Install dependencies and Compile TypeScript.
       # The 'working-directory' option ensures these commands run within the 'extension' folder.
