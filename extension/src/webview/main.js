@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatHistory = document.getElementById('chat-history');
     const promptInput = document.getElementById('prompt-input');
     const sendButton = document.getElementById('send-button');
+    let isGenerating = false; 
     const newChatButton = document.getElementById('new-chat-button');
     const keyStatusIndicator = document.getElementById('key-status-indicator');
     
@@ -506,6 +507,33 @@ document.addEventListener('DOMContentLoaded', () => {
     
 
 
+    const setGeneratingState = (generating) => {
+        isGenerating = generating;
+        if (generating) {
+            sendButton.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                </svg>
+            `;
+            sendButton.title = "Stop Generation";
+            sendButton.classList.add('stop-button');
+            promptInput.disabled = true;
+            sendButton.disabled = false;
+        } else {
+            sendButton.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            `;
+            sendButton.title = "Send Prompt (Arrow Icon)";
+            sendButton.classList.remove('stop-button');
+            promptInput.disabled = false;
+            sendButton.disabled = false;
+            promptInput.focus();
+        }
+    };
+
     // Handle incoming messages from extension.ts
     window.addEventListener('message', event => {
         const message = event.data;
@@ -518,9 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Re-enable inputs only AFTER a response or error is handled
         if (message.command === 'response' || message.command === 'error') {
-            promptInput.disabled = false;
-            sendButton.disabled = false;
-            promptInput.focus();
+            setGeneratingState(false);
             // 3. Save state after response
             saveChatHistory();
         }
@@ -565,6 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'loading':
+                setGeneratingState(true);
                 appendMessage('loading', content);
                 break;
             case 'response':
@@ -619,6 +646,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function sendMessage() {
+        if (isGenerating) {
+            postMessage('stopGeneration');
+            setGeneratingState(false);
+            return;
+        }
+
         const prompt = promptInput.value.trim();
         if (!prompt) return;
 
@@ -628,8 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
         promptInput.value = '';
         promptInput.style.height = 'auto';
         promptInput.disabled = true;
-        sendButton.disabled = true;
-
+        
         postMessage('submitPrompt', { text: prompt });
         
         // Hide palette if active when sending a message

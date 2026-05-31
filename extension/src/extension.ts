@@ -27,6 +27,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     private _view?: vscode.WebviewView;
     private apiAgent: GoogleGenAI | null = null;
+    private currentAbortController: AbortController | null = null;
     
     private chatModel: string;
     private contextFiles: Map<string, string> = new Map(); 
@@ -130,6 +131,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             switch (message.command) {
                 case 'submitPrompt':
                     this.handlePromptSubmission(message.text);
+                    return;
+                case 'stopGeneration':
+                    this.handleStopGeneration();
                     return;
                 case 'insertCode':
                     this.insertCode(message.code);
@@ -384,6 +388,14 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
     
+    private handleStopGeneration() {
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.currentAbortController = null;
+            this.sendMessageToWebview('error', 'Generation stopped by user.');
+        }
+    }
+
     private async handlePromptSubmission(userPrompt: string) {
         if (!this._view) return;
 
@@ -399,15 +411,21 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         const fullDocumentContent = document.getText();
 
         this.sendMessageToWebview('loading', 'Thinking...');
+        
+        this.currentAbortController = new AbortController();
+        const signal = this.currentAbortController.signal;
 
         let attempts = 0;
         const maxAttempts = (await this.secretManager.getAllKeyNames()).length || 1;
 
         while (attempts < maxAttempts) {
+            if (signal.aborted) break;
+
             if (!this.apiAgent) {
                 await this.initializeApiAgent();
                 if (!this.apiAgent) {
                     this.sendMessageToWebview('error', 'No active API Key found. Please add one in settings.');
+                    this.currentAbortController = null;
                     return;
                 }
             }
@@ -462,13 +480,20 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     config: { systemInstruction: systemInstruction }
                 });
                 
+                if (signal.aborted) return;
+
                 if (response && response.text) {
                     this.sendMessageToWebview('response', response.text);
+                    this.currentAbortController = null;
                     return; // Success
                 } else {
                     throw new Error('Empty response from API.');
                 }
             } catch (error: any) {
+                if (signal.aborted) {
+                    this.currentAbortController = null;
+                    return;
+                }
                 attempts++;
                 const currentKey = this.secretManager.getActiveKeyName() || '';
                 const nextKey = await this.secretManager.getNextKeyName(currentKey);
@@ -482,10 +507,12 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     const errorMessage = error instanceof Error ? error.message : String(error);
                     console.error('API Call Failed after all attempts:', errorMessage);
                     this.sendMessageToWebview('error', `Gemini API Error: ${errorMessage}`);
+                    this.currentAbortController = null;
                     return;
                 }
             }
         }
+        this.currentAbortController = null;
     }
     
     private sendMessageToWebview(type: 'loading' | 'response' | 'error' | 'newChatConfirm' | 'openPalette' | 'success', content: string) {
