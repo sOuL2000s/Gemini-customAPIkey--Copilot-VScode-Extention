@@ -33,12 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. New active file indicator element
     const activeFileIndicator = document.getElementById('active-file-indicator'); 
     const addContextFileButton = document.getElementById('add-context-file-button');
+    const autoContextButton = document.getElementById('auto-context-button');
     
     // R4: Command Palette Elements
     const commandPalette = document.getElementById('command-palette');
     const paletteInput = document.getElementById('palette-input');
 
-    const CHAT_STORAGE_KEY = 'geminiLocalCoderChatHistory'; // 3. Storage key
     const initialWelcomeMessage = `
         <div class="message system">
             <p>Hello! I am Gemini, your expert coding assistant.</p>
@@ -53,26 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
         </div>`;
 
-    // 3. Load chat history on startup
-    loadChatHistory();
-
-    function loadChatHistory() {
-        const history = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (history) {
-            try {
-                // Ensure history is parsed, then inserted as innerHTML
-                chatHistory.innerHTML = JSON.parse(history);
-            } catch {
-                chatHistory.innerHTML = initialWelcomeMessage;
-            }
-        } else {
-            chatHistory.innerHTML = initialWelcomeMessage; 
-        }
-    }
-    
     function saveChatHistory() {
-        // 3. Save chat history to local storage
-        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory.innerHTML));
+        // Post the history to the extension host for persistence
+        postMessage('saveChatHistory', { history: chatHistory.innerHTML });
     }
 
     // Utility to post a message to the extension host (extension.ts)
@@ -86,19 +69,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const updateToggleStates = () => {
-        keyManagementToggle.classList.toggle('active', keyManagementPanel.style.display === 'flex');
-        settingsToggle.classList.toggle('active', settingsPanel.style.display === 'flex');
+        const keyVisible = keyManagementPanel.style.display === 'flex';
+        const settingsVisible = settingsPanel.style.display === 'flex';
+        
+        keyManagementToggle.classList.toggle('active', keyVisible);
+        keyManagementToggle.setAttribute('aria-expanded', keyVisible);
+        
+        settingsToggle.classList.toggle('active', settingsVisible);
+        settingsToggle.setAttribute('aria-expanded', settingsVisible);
     };
 
     // R6: Key Management Toggle
     keyManagementToggle.addEventListener('click', () => {
         const isCurrentlyVisible = keyManagementPanel.style.display === 'flex';
-        
         settingsPanel.style.display = 'none';
         
         if (!isCurrentlyVisible) {
             postMessage('requestKeyManagementDetails');
             keyManagementPanel.style.display = 'flex';
+            // Accessibility: Focus first interactive element in panel
+            setTimeout(() => keyManagementPanel.querySelector('button, input').focus(), 50);
         } else {
             keyManagementPanel.style.display = 'none';
         }
@@ -109,17 +99,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // NEW: Settings Toggle
     settingsToggle.addEventListener('click', () => {
         const isCurrentlyVisible = settingsPanel.style.display === 'flex';
-        
         keyManagementPanel.style.display = 'none';
 
         if (!isCurrentlyVisible) {
             postMessage('requestSettingsDetails');
             settingsPanel.style.display = 'flex';
+            // Accessibility: Focus first interactive element in panel
+            setTimeout(() => settingsPanel.querySelector('button, select').focus(), 50);
         } else {
             settingsPanel.style.display = 'none';
         }
         updateToggleStates();
         togglePalette(false);
+    });
+
+    // Panel Keyboard Navigation
+    [keyManagementPanel, settingsPanel].forEach(panel => {
+        panel.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                panel.style.display = 'none';
+                updateToggleStates();
+                // Return focus to the toggle that opened it
+                if (panel === keyManagementPanel) keyManagementToggle.focus();
+                else settingsToggle.focus();
+            }
+        });
     });
 
     // Handle close buttons inside panels
@@ -178,6 +182,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- F3: Contextual File Inclusion ---
     addContextFileButton.addEventListener('click', () => {
         postMessage('addFileContext');
+    });
+
+    autoContextButton.addEventListener('click', () => {
+        postMessage('autoAddContext');
     });
     
     contextFileList.addEventListener('click', (e) => {
@@ -404,6 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
         keys.forEach(key => {
             const listItem = document.createElement('li');
             listItem.classList.add('key-item');
+            listItem.setAttribute('role', 'option');
+            listItem.setAttribute('aria-selected', key.isActive);
+
             if (key.isActive) {
                 listItem.classList.add('active');
             }
@@ -412,8 +423,8 @@ document.addEventListener('DOMContentLoaded', () => {
             listItem.innerHTML = `
                 <span class="key-name" title="${key.name}">${key.name}</span>
                 <div class="key-actions">
-                    ${!key.isActive ? `<button class="key-select-button">Set Active</button>` : `<span class="active-badge">Active</span>`}
-                    <button class="key-delete-button" title="Delete Key">&times;</button>
+                    ${!key.isActive ? `<button class="key-select-button" aria-label="Set ${key.name} as active">Set Active</button>` : `<span class="active-badge" aria-label="Currently Active">Active</span>`}
+                    <button class="key-delete-button" title="Delete Key" aria-label="Delete API Key ${key.name}">&times;</button>
                 </div>
             `;
             keyList.appendChild(listItem);
@@ -567,6 +578,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     contextHeader.classList.add('key-missing'); 
                 }
                 updateContextFileList(message.contextFiles || []);
+
+                // Load Chat History if provided and current view is just initialized
+                if (message.chatHistory && chatHistory.children.length <= 1 && chatHistory.querySelector('.message.system')) {
+                    chatHistory.innerHTML = message.chatHistory;
+                    attachCodeActionListeners(); // Re-attach listeners to restored buttons
+                } else if (!chatHistory.innerHTML.trim()) {
+                     chatHistory.innerHTML = initialWelcomeMessage;
+                }
                 
                 // NEW: Update Settings UI if config data is present
                 if (message.config) {
@@ -582,8 +601,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             case 'newChatConfirm':
                 chatHistory.innerHTML = initialWelcomeMessage;
-                // 3. Clear chat history from storage
-                localStorage.removeItem(CHAT_STORAGE_KEY);
                 break;
             
             case 'openPalette':

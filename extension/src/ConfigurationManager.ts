@@ -27,7 +27,7 @@ export class ConfigurationManager {
     public static getInlineModel(): string {
         const config = vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION);
         // Default matches the one defined in package.json
-        return config.get<string>('inlineModel') || "gemini-2.5-flash";
+        return config.get<string>('inlineModel') || "gemini-2.5-flash-lite";
     }
     
     /**

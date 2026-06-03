@@ -2,7 +2,7 @@
   "name": "gemini-local-coder",
   "displayName": "Gemini Local Coder",
   "description": "A high-performance, self-contained coding assistant powered directly by the Gemini API.",
-  "version": "3.6.3",
+  "version": "3.6.4",
   "publisher": "Souparna Paul",
   "license": "MIT",
   "repository": {
@@ -98,7 +98,7 @@
         },
         "gemini.inlineModel": {
           "type": "string",
-          "default": "gemini-3-flash-preview",
+          "default": "gemini-2.5-flash-lite",
           "description": "The Gemini model used for inline code completions (requires a fast model).",
           "enum": [
             "gemini-2.5-flash",

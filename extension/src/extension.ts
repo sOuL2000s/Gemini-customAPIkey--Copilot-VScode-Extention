@@ -35,7 +35,8 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly secretManager: SecretStorageManager
+        private readonly secretManager: SecretStorageManager,
+        private readonly globalState: vscode.Memento
     ) {
         this.chatModel = ConfigurationManager.getChatModel(); // Initialize model
         this.updateActiveFile(); // 1. Initial file check
@@ -80,6 +81,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private postViewStatus() {
         if (this._view) {
             const activeKeyName = this.secretManager.getActiveKeyName() || null;
+            const chatHistory = this.globalState.get<string>('geminiLocalCoderChatHistory', '');
             
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
@@ -87,6 +89,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 contextFiles: Array.from(this.contextFiles.keys()),
                 activeFile: this.activeFileName, // 1. Pass active file name
                 activeKeyName: activeKeyName, // NEW: Pass active key name
+                chatHistory: chatHistory, // Pass persisted history
                 // NEW: Configuration Status
                 config: {
                     chatModel: ConfigurationManager.getChatModel(),
@@ -144,6 +147,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'newChat':
                     this.handleNewChatSession();
                     return;
+                case 'saveChatHistory':
+                    await this.globalState.update('geminiLocalCoderChatHistory', message.history);
+                    return;
                 case 'requestSettingsDetails':
                     this.postViewStatus(); // Forces sending config data
                     return;
@@ -186,6 +192,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
+                case 'autoAddContext':
+                    this.autoDetectContext();
+                    return;
                 case 'removeFileContext':
                     this.handleRemoveFileContext(message.uri);
                     return;
@@ -210,8 +219,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         });
     }
     
-    private handleNewChatSession() {
+    private async handleNewChatSession() {
         this.contextFiles.clear();
+        await this.globalState.update('geminiLocalCoderChatHistory', '');
         this.postViewStatus(); 
         this.sendMessageToWebview('newChatConfirm', 'Session reset.');
     }
@@ -386,6 +396,74 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private handleRemoveFileContext(uriPath: string) {
         this.contextFiles.delete(uriPath);
         this.postViewStatus();
+    }
+
+    private async autoDetectContext() {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            this.sendMessageToWebview('error', 'No active editor found.');
+            return;
+        }
+
+        const document = editor.document;
+        const text = document.getText();
+        const detectedTerms = new Set<string>();
+
+        // ESM/TS imports and exports
+        const jsRegex = /(?:import|export)\s+.*?\s+from\s+['"](.*?)['"]/g;
+        // CommonJS require
+        const cjsRegex = /require\(['"](.*?)['"]\)/g;
+        // Python imports
+        const pyFromRegex = /from\s+([\w.]+)\s+import/g;
+        const pyImportRegex = /^import\s+([\w.]+)/gm;
+
+        let match;
+        while ((match = jsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+        while ((match = cjsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+        while ((match = pyFromRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+        while ((match = pyImportRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+
+        if (detectedTerms.size === 0) {
+            this.sendMessageToWebview('error', 'No obvious dependencies detected in active file.');
+            return;
+        }
+
+        this.sendMessageToWebview('loading', 'Scanning for related files...');
+        let filesAdded = 0;
+
+        for (const term of detectedTerms) {
+            // Clean up term (remove extensions for search, or handle python dots)
+            const cleanTerm = term.replace(/\.[jt]sx?$/, '').replace(/\./g, '/');
+            const fileName = cleanTerm.split('/').pop();
+            if (!fileName || fileName.length < 3) continue;
+
+            // Search for files ending in common extensions matching this name
+            const searchPattern = `**/${fileName}.{ts,js,py,tsx,jsx,json}`;
+            const foundUris = await vscode.workspace.findFiles(searchPattern, '**/node_modules/**', 3);
+
+            for (const uri of foundUris) {
+                if (this.contextFiles.has(uri.fsPath) || uri.fsPath === document.uri.fsPath) continue;
+                
+                try {
+                    const contentBytes = await vscode.workspace.fs.readFile(uri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    
+                    if (content.length <= 100000) {
+                        this.contextFiles.set(uri.fsPath, content);
+                        filesAdded++;
+                    }
+                } catch (e) {
+                    console.error(`Failed to auto-add file ${uri.fsPath}:`, e);
+                }
+            }
+        }
+
+        if (filesAdded > 0) {
+            this.postViewStatus();
+            this.sendMessageToWebview('success', `Automatically added ${filesAdded} related file(s) to context.`);
+        } else {
+            this.sendMessageToWebview('error', 'Could not resolve detected dependencies to local files.');
+        }
     }
     
     private handleStopGeneration() {
@@ -770,6 +848,14 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                     <polyline points="14 2 14 8 20 8"/>
                                 </svg>
                             </button>
+
+                            <button id="auto-context-button" title="Auto-detect related files (Imports/Exports)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
+                                    <line x1="16" y1="8" x2="2" y2="22"></line>
+                                    <line x1="17.5" y1="15" x2="9" y2="15"></line>
+                                </svg>
+                            </button>
                             
                             <button id="new-chat-button" title="Start New Chat Session (Plus Icon)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -779,7 +865,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             </button>
                             
                             <!-- API Key Management Toggle Button -->
-                            <button id="key-management-toggle" title="Manage API Keys">
+                            <button id="key-management-toggle" title="Manage API Keys" aria-haspopup="true" aria-expanded="false" aria-controls="key-management-panel">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="3"></circle>
                                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"></path>
@@ -787,7 +873,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             </button>
                             
                             <!-- Settings Toggle Button (New) -->
-                            <button id="settings-toggle" title="Model and Latency Settings">
+                            <button id="settings-toggle" title="Model and Latency Settings" aria-haspopup="true" aria-expanded="false" aria-controls="settings-panel">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 20V10"/>
                                     <path d="M18 20V4"/>
@@ -809,28 +895,28 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     </div>
                     
                     <!-- NEW: Key Management Panel -->
-                    <div id="key-management-panel" style="display: none;">
+                    <div id="key-management-panel" style="display: none;" role="dialog" aria-labelledby="key-mgmt-title">
                         <div class="panel-section">
-                            <button class="panel-close-button" title="Close Panel">&times;</button>
-                            <h4>Active Key Selection</h4>
-                            <ul id="key-list">
+                            <button class="panel-close-button" title="Close Panel" aria-label="Close API Key Management">&times;</button>
+                            <h4 id="key-mgmt-title">Active Key Selection</h4>
+                            <ul id="key-list" role="listbox" aria-label="Stored API Keys">
                                 <!-- Key buttons loaded here -->
                             </ul>
                         </div>
                         <div class="panel-section">
                             <h4>Add/Update API Key</h4>
-                            <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required>
-                            <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required>
+                            <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required aria-label="API Key Name">
+                            <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required aria-label="API Key Value">
                             <button id="key-save-button">Save & Set Active</button>
                         </div>
                     </div>
                     
                     <!-- NEW: Settings Panel -->
-                    <div id="settings-panel" style="display: none;">
+                    <div id="settings-panel" style="display: none;" role="dialog" aria-labelledby="settings-title">
                         <div class="panel-section">
-                            <button class="panel-close-button" title="Close Panel">&times;</button>
-                            <h4>Chat Model Selection</h4>
-                            <select id="chat-model-select">
+                            <button class="panel-close-button" title="Close Panel" aria-label="Close Settings">&times;</button>
+                            <h4 id="settings-title">Chat Model Selection</h4>
+                            <select id="chat-model-select" aria-label="Select Chat Model">
                                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                 <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
                                 <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
@@ -904,7 +990,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize Secret Storage Manager
     const secretManager = new SecretStorageManager(context.secrets);
 
-    const provider = new GeminiCoderProvider(context.extensionUri, secretManager); // Pass manager
+    const provider = new GeminiCoderProvider(context.extensionUri, secretManager, context.globalState); // Pass manager and state
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(GeminiCoderProvider.viewType, provider)
     );

@@ -569,6 +569,7 @@ body {
 /* --- Icon Buttons (New Chat, Attachment, Settings) --- */
 #new-chat-button, 
 #add-context-file-button,
+#auto-context-button,
 #key-management-toggle,
 #settings-toggle {
     background: none;
@@ -586,6 +587,7 @@ body {
 
 #new-chat-button:hover, 
 #add-context-file-button:hover,
+#auto-context-button:hover,
 #key-management-toggle:hover,
 #settings-toggle:hover {
     opacity: 1;
