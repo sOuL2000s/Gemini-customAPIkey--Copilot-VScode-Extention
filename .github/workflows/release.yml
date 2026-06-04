@@ -6,9 +6,8 @@ name: Release VS Code Extension
 # including optional pre-release identifiers (e.g., 1.0.0, v1.0.0-beta.1).
 on:
   push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+*'   # Matches tags like "1.2.3", "1.2.3-beta", etc.
-      - 'v[0-9]+.[0-9]+.[0-9]+*' # Matches tags like "v1.2.3", "v1.2.3-rc.1", etc.
+    branches:
+      - main # Triggers on every push to the main branch
 
 # 3. Jobs: A workflow is composed of one or more jobs. This workflow has a single job named "release".
 jobs:
@@ -24,16 +23,31 @@ jobs:
     # 6. Steps: A job contains a sequence of steps that are executed in order.
     steps:
       # Step 1: Checkout your repository code.
-      # This checks out the entire 'GEMINI-LOCAL-CODER' repository.
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # 'fetch-depth: 0' ensures the entire Git history is fetched.
-          # This is necessary for 'generate_release_notes: true' to compare commits
-          # between tags and create proper release descriptions.
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 2: Set up Node.js environment.
+      # Step 2: Automated Versioning and Tagging
+      # This determines the next version based on commit messages (feat:, fix:, chore:, etc.)
+      - name: Bump version and push tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.67.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+
+      # Step 3: Sync package.json version with the new tag
+      - name: Sync package.json version
+        working-directory: extension/
+        run: |
+          NEW_VERSION=${{ steps.tag_version.outputs.new_tag }}
+          # Strip the 'v' prefix for npm version
+          npm version ${NEW_VERSION#v} --no-git-tag-version
+
+      # Step 4: Set up Node.js environment.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,32 +57,31 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'extension/package-lock.json'
 
-      # Step 3: Install dependencies and Compile TypeScript.
-      # The 'working-directory' option ensures these commands run within the 'extension' folder.
+      # Step 5: Install dependencies and Compile TypeScript.
       - name: Install dependencies and Compile TypeScript
-        working-directory: extension/ # <--- IMPORTANT CHANGE HERE
+        working-directory: extension/
         run: |
           npm install
-          npm run compile # This runs the 'tsc -p ./' command defined in your package.json
+          npm run compile
 
-      # Step 4: Package the VS Code extension into a .vsix file.
-      # The 'working-directory' option ensures this command also runs within the 'extension' folder.
-      # The .vsix file will be created inside 'extension/'.
+      # Step 6: Package the VS Code extension into a .vsix file.
       - name: Package VS Code Extension (VSIX)
-        working-directory: extension/ # <--- IMPORTANT CHANGE HERE
-        run: npx vsce package # This command creates the .vsix file.
+        working-directory: extension/
+        run: npx vsce package
 
-      # Step 5: Create a GitHub Release and attach the VSIX.
+      # Step 7: Create a GitHub Release and attach the VSIX.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: |
+            Automated Release for version ${{ steps.tag_version.outputs.new_tag }}
+            
+            Commits since last release included in the notes below.
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') || contains(github.ref_name, '-pre') }}
+          prerelease: false
           generate_release_notes: true
-          # The 'files' path must now be relative to the repository root
-          # to find the .vsix file generated within the 'extension/' folder.
-          files: 'extension/*.vsix' # <--- IMPORTANT CHANGE HERE
+          files: 'extension/*.vsix'
