@@ -1,10 +1,12 @@
 // src/extension.ts
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GeminiInlineCompletionProvider } from './InlineCompletionProvider';
 import { SecretStorageManager } from './SecretStorageManager';
+import { FindReplaceStrategy } from './FindReplaceStrategy';
 
 /**
  * Utility function to generate a nonce for CSP.
@@ -144,6 +146,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'replaceSelection':
                     this.replaceSelection(message.code);
                     return;
+                case 'requestNewChatConfirmation':
+                    this.handleNewChatConfirmation();
+                    return;
                 case 'newChat':
                     this.handleNewChatSession();
                     return;
@@ -219,6 +224,18 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         });
     }
     
+    private async handleNewChatConfirmation() {
+        const response = await vscode.window.showWarningMessage(
+            'Are you sure you want to start a new chat? This will clear the current chat history and context files.',
+            { modal: true },
+            'New Chat'
+        );
+
+        if (response === 'New Chat') {
+            this.handleNewChatSession();
+        }
+    }
+
     private async handleNewChatSession() {
         this.contextFiles.clear();
         await this.globalState.update('geminiLocalCoderChatHistory', '');
@@ -406,6 +423,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         }
 
         const document = editor.document;
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         const text = document.getText();
         const detectedTerms = new Set<string>();
 
@@ -423,25 +441,61 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         while ((match = pyFromRegex.exec(text)) !== null) detectedTerms.add(match[1]);
         while ((match = pyImportRegex.exec(text)) !== null) detectedTerms.add(match[1]);
 
-        if (detectedTerms.size === 0) {
-            this.sendMessageToWebview('error', 'No obvious dependencies detected in active file.');
-            return;
-        }
-
         this.sendMessageToWebview('loading', 'Scanning for related files...');
         let filesAdded = 0;
+        const currentDir = path.dirname(document.uri.fsPath);
 
+        // 1. Add key config files if they exist in workspace root
+        if (workspaceFolder) {
+            const configFiles = ['tsconfig.json', 'package.json', 'requirements.txt', 'pyproject.toml', '.env.example'];
+            for (const cfg of configFiles) {
+                const cfgUri = vscode.Uri.joinPath(workspaceFolder.uri, cfg);
+                try {
+                    await vscode.workspace.fs.stat(cfgUri);
+                    const contentBytes = await vscode.workspace.fs.readFile(cfgUri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    if (content.length <= 50000 && !this.contextFiles.has(cfgUri.fsPath)) {
+                        this.contextFiles.set(cfgUri.fsPath, content);
+                        filesAdded++;
+                    }
+                } catch { /* file doesn't exist */ }
+            }
+        }
+
+        // 2. Resolve detected terms
         for (const term of detectedTerms) {
-            // Clean up term (remove extensions for search, or handle python dots)
-            const cleanTerm = term.replace(/\.[jt]sx?$/, '').replace(/\./g, '/');
-            const fileName = cleanTerm.split('/').pop();
-            if (!fileName || fileName.length < 3) continue;
+            let targetUris: vscode.Uri[] = [];
 
-            // Search for files ending in common extensions matching this name
-            const searchPattern = `**/${fileName}.{ts,js,py,tsx,jsx,json}`;
-            const foundUris = await vscode.workspace.findFiles(searchPattern, '**/node_modules/**', 3);
+            if (term.startsWith('.')) {
+                // Relative path resolution for JS/TS
+                const resolvedPath = path.resolve(currentDir, term);
+                const extensions = ['.ts', '.js', '.tsx', '.jsx', '.json'];
+                const potentialPaths = [resolvedPath, ...extensions.map(ext => resolvedPath + ext)];
+                
+                // Check for index files in directories
+                potentialPaths.push(path.join(resolvedPath, 'index.ts'), path.join(resolvedPath, 'index.js'));
 
-            for (const uri of foundUris) {
+                for (const p of potentialPaths) {
+                    const uri = vscode.Uri.file(p);
+                    try {
+                        await vscode.workspace.fs.stat(uri);
+                        targetUris.push(uri);
+                        break; 
+                    } catch {}
+                }
+            } else {
+                // Named import or python dot notation
+                const cleanTerm = term.replace(/\.[jt]sx?$/, '').replace(/\./g, '/');
+                const fileName = cleanTerm.split('/').pop();
+                if (!fileName || fileName.length < 3) continue;
+
+                // Search for files matching the term across the workspace
+                const searchPattern = `**/${fileName}.{ts,js,py,tsx,jsx,json}`;
+                const found = await vscode.workspace.findFiles(searchPattern, '**/node_modules/**', 2);
+                targetUris.push(...found);
+            }
+
+            for (const uri of targetUris) {
                 if (this.contextFiles.has(uri.fsPath) || uri.fsPath === document.uri.fsPath) continue;
                 
                 try {
@@ -460,7 +514,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
         if (filesAdded > 0) {
             this.postViewStatus();
-            this.sendMessageToWebview('success', `Automatically added ${filesAdded} related file(s) to context.`);
+            this.sendMessageToWebview('success', `Added ${filesAdded} related file(s) to context.`);
+        } else if (detectedTerms.size === 0) {
+             this.sendMessageToWebview('error', 'No obvious dependencies detected.');
         } else {
             this.sendMessageToWebview('error', 'Could not resolve detected dependencies to local files.');
         }
@@ -696,109 +752,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
      * 3. First-line Anchor Search + simple bracket/parenthesis/brace matching
      */
     private async findMatchingRange(document: vscode.TextDocument, findTextLF: string): Promise<{ range: vscode.Range, foundMatchText: string } | null> {
-        const documentContent = document.getText();
-        const documentLines = documentContent.split('\n');
-        const findLines = findTextLF.split('\n');
-
-        // Strategy 1: Exact Match
-        let startIndex = documentContent.indexOf(findTextLF);
-        if (startIndex !== -1) {
-            const endIndex = startIndex + findTextLF.length;
-            console.log("DEBUG: Matched using Strategy 1 (Exact Match).");
-            return {
-                range: new vscode.Range(document.positionAt(startIndex), document.positionAt(endIndex)),
-                foundMatchText: findTextLF
-            };
-        }
-        console.log("DEBUG: Strategy 1 (Exact Match) failed.");
-
-        // Strategy 2: Normalized Match (ignore all leading/trailing whitespace per line for comparison)
-        const findLinesTrimmed = findLines.map(line => line.trim());
-
-        if (findLinesTrimmed.length > 0 && findLinesTrimmed.join('').trim().length > 0) { // Only attempt if there's non-empty content to find
-            for (let i = 0; i <= documentLines.length - findLinesTrimmed.length; i++) {
-                let match = true;
-                let foundBlockLines: string[] = [];
-                for (let j = 0; j < findLinesTrimmed.length; j++) {
-                    if (i + j >= documentLines.length || documentLines[i + j].trim() !== findLinesTrimmed[j]) {
-                        match = false;
-                        break;
-                    }
-                    foundBlockLines.push(documentLines[i + j]);
-                }
-                if (match) {
-                    // Reconstruct the found block from original document lines to get accurate range
-                    const blockStartIndex = document.offsetAt(new vscode.Position(i, 0));
-                    // The end of the range is inclusive of the last character of the last line
-                    const blockEndIndex = document.offsetAt(new vscode.Position(i + findLinesTrimmed.length - 1, documentLines[i + findLinesTrimmed.length - 1].length));
-                    console.log("DEBUG: Matched using Strategy 2 (Normalized Match).");
-                    return {
-                        range: new vscode.Range(document.positionAt(blockStartIndex), document.positionAt(blockEndIndex)),
-                        foundMatchText: foundBlockLines.join('\n')
-                    };
-                }
-            }
-        }
-        console.log("DEBUG: Strategy 2 (Normalized Match) failed.");
-
-        // Strategy 3: First-line Anchor Search + simple bracket/parenthesis/brace matching
-        // This is primarily for finding code blocks that start with an identifier and end with a structural element.
-        // It's a heuristic and might not work for all code structures.
-        const firstFindMeaningfulLine = findLines.find(line => line.trim().length > 0);
-        
-        if (firstFindMeaningfulLine) {
-            const firstFindLineTrimmed = firstFindMeaningfulLine.trim();
-
-            for (let i = 0; i < documentLines.length; i++) {
-                // Look for the first trimmed line of the find block within the document lines
-                if (documentLines[i].trim().startsWith(firstFindLineTrimmed)) {
-                    // Potential start line found. Now attempt to find the end using bracket matching.
-                    let openBracketCount = 0; // For (), [], {}
-                    let blockEndLineIndex = -1;
-                    let potentialFoundTextLines: string[] = [];
-
-                    for (let k = i; k < documentLines.length; k++) {
-                        const line = documentLines[k];
-                        potentialFoundTextLines.push(line);
-
-                        for (const char of line) {
-                            if (char === '(' || char === '[' || char === '{') {
-                                openBracketCount++;
-                            } else if (char === ')' || char === ']' || char === '}') {
-                                openBracketCount--;
-                            }
-                        }
-
-                        // We consider the block closed if brackets are balanced, and we've processed more than just the start line.
-                        if (openBracketCount <= 0 && k > i) { 
-                            blockEndLineIndex = k;
-                            break;
-                        }
-                    }
-
-                    if (blockEndLineIndex !== -1) {
-                        const foundBlockText = potentialFoundTextLines.join('\n');
-                        
-                        // Verify if this structurally found block's normalized content matches the findTextLF's normalized content
-                        const normalizedFoundBlock = foundBlockText.split('\n').map(l => l.trim()).join('\n').trim();
-                        const normalizedFindText = findTextLF.split('\n').map(l => l.trim()).join('\n').trim();
-
-                        if (normalizedFoundBlock === normalizedFindText) {
-                            const blockStartIndex = document.offsetAt(new vscode.Position(i, 0));
-                            const blockEndIndex = document.offsetAt(new vscode.Position(blockEndLineIndex, documentLines[blockEndLineIndex].length));
-                            console.log("DEBUG: Matched using Strategy 3 (First-line Anchor + Bracket Matching).");
-                            return {
-                                range: new vscode.Range(document.positionAt(blockStartIndex), document.positionAt(blockEndIndex)),
-                                foundMatchText: foundBlockText
-                            };
-                        }
-                    }
-                }
-            }
-        }
-        console.log("DEBUG: Strategy 3 (First-line Anchor + Bracket Matching) failed.");
-
-        return null;
+        return FindReplaceStrategy.findMatchingRange(document, findTextLF);
     }
 
 
@@ -824,11 +778,16 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             <p>Hello! I am Gemini, your expert coding assistant.</p>
                             <p>Here are my key functionalities:</p>
                             <ul>
-                                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
-                                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
-                                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
-                                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
-                                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+                                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time suggestions. Model and latency can be tuned in Settings <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg>.</li>
+                                <li><b>Code Chat:</b> Ask questions or refactor code. Selected text in the editor is automatically included as context.</li>
+                                <li><b>Context Management:</b> Use <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> to add files, or the wand icon to auto-detect workspace dependencies.</li>
+                                <li><b>Command Palette:</b> Access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
+                                <li><b>Action Blocks:</b> Gemini uses <code>--- FIND --- / --- REPLACE ---</code> blocks for modifications.
+                                    <ul>
+                                        <li><b>Apply to Active File:</b> Uses a robust matching strategy to automatically update the code in your current editor.</li>
+                                        <li><b>Send to Global Search:</b> Recommended for workspace-wide changes. Opens the VS Code Search sidebar with pre-filled fields for review.</li>
+                                    </ul>
+                                </li>
                             </ul>
                             <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
                         </div>
@@ -987,6 +946,8 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 export function activate(context: vscode.ExtensionContext) {
     console.log('Gemini Local Coder extension is now active!');
 
+    const api = { context };
+
     // Initialize Secret Storage Manager
     const secretManager = new SecretStorageManager(context.secrets);
 
@@ -1011,6 +972,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
     
     console.log('Gemini Inline Completion Provider registered.');
+    return api;
 }
 
 export function deactivate() { }

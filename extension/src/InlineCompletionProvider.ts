@@ -1,5 +1,6 @@
 // src/InlineCompletionProvider.ts
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { DebounceController } from './DebounceController';
 import { ConfigurationManager } from './ConfigurationManager';

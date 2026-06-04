@@ -1,257 +1,283 @@
 // src/webview/main.js
 // This script runs in the webview context.
-// src/webview/main.js
-// This script runs in the webview context.
 const vscode = acquireVsCodeApi();
 
 document.addEventListener('DOMContentLoaded', () => {
-    const chatHistory = document.getElementById('chat-history');
-    const promptInput = document.getElementById('prompt-input');
-    const sendButton = document.getElementById('send-button');
-    let isGenerating = false; 
-    const newChatButton = document.getElementById('new-chat-button');
-    const keyStatusIndicator = document.getElementById('key-status-indicator');
-    
-    // Key Management Elements (R6)
-    const keyManagementToggle = document.getElementById('key-management-toggle');
-    const keyManagementPanel = document.getElementById('key-management-panel');
-    const keyNameInput = document.getElementById('key-name-input');
-    const keyValueInput = document.getElementById('key-value-input');
-    const keySaveButton = document.getElementById('key-save-button');
-    const keyList = document.getElementById('key-list');
+    // --- UI Element References ---
+    const ui = {
+        chatHistory: document.getElementById('chat-history'),
+        promptInput: document.getElementById('prompt-input'),
+        sendButton: document.getElementById('send-button'),
+        newChatButton: document.getElementById('new-chat-button'),
+        keyStatusIndicator: document.getElementById('key-status-indicator'),
+        contextHeader: document.getElementById('context-header'),
+        contextFileList: document.getElementById('context-file-list'),
+        activeFileIndicator: document.getElementById('active-file-indicator'),
+        addContextFileButton: document.getElementById('add-context-file-button'),
+        autoContextButton: document.getElementById('auto-context-button'),
+        
+        keyManagement: {
+            toggle: document.getElementById('key-management-toggle'),
+            panel: document.getElementById('key-management-panel'),
+            nameInput: document.getElementById('key-name-input'),
+            valueInput: document.getElementById('key-value-input'),
+            saveButton: document.getElementById('key-save-button'),
+            list: document.getElementById('key-list')
+        },
+        settings: {
+            toggle: document.getElementById('settings-toggle'),
+            panel: document.getElementById('settings-panel'),
+            chatModelSelect: document.getElementById('chat-model-select'),
+            inlineModelSelect: document.getElementById('inline-model-select'),
+            debounceInput: document.getElementById('debounce-input')
+        },
+        palette: {
+            container: document.getElementById('command-palette'),
+            input: document.getElementById('palette-input')
+        }
+    };
 
-    // NEW Settings Elements
-    const settingsToggle = document.getElementById('settings-toggle');
-    const settingsPanel = document.getElementById('settings-panel');
-    const chatModelSelect = document.getElementById('chat-model-select');
-    const inlineModelSelect = document.getElementById('inline-model-select');
-    const debounceInput = document.getElementById('debounce-input');
-    
-    // UI ELEMENTS FOR F3
-    const contextHeader = document.getElementById('context-header');
-    const contextFileList = document.getElementById('context-file-list');
-    // 1. New active file indicator element
-    const activeFileIndicator = document.getElementById('active-file-indicator'); 
-    const addContextFileButton = document.getElementById('add-context-file-button');
-    const autoContextButton = document.getElementById('auto-context-button');
-    
-    // R4: Command Palette Elements
-    const commandPalette = document.getElementById('command-palette');
-    const paletteInput = document.getElementById('palette-input');
+    // --- State Management ---
+    let state = {
+        isGenerating: false,
+        lastUserPrompt: '', // Store for retry functionality
+        activePanel: null, // 'keyManagement', 'settings', or null
+        paletteVisible: false,
+        keyStatus: {
+            active: false,
+            activeName: null
+        },
+        context: {
+            files: [],
+            activeFileName: null
+        },
+        config: {
+            chatModel: 'gemini-2.5-flash',
+            inlineModel: 'gemini-2.5-flash-lite',
+            debounceMs: 500
+        },
+        keyDetails: {
+            keys: [],
+            activeName: ''
+        }
+    };
 
+    function updateState(newState) {
+        state = { ...state, ...newState };
+        render();
+    }
+
+    function render() {
+        // 1. Panels and Toggles
+        ui.keyManagement.panel.style.display = state.activePanel === 'keyManagement' ? 'flex' : 'none';
+        ui.settings.panel.style.display = state.activePanel === 'settings' ? 'flex' : 'none';
+        
+        ui.keyManagement.toggle.classList.toggle('active', state.activePanel === 'keyManagement');
+        ui.keyManagement.toggle.setAttribute('aria-expanded', state.activePanel === 'keyManagement');
+        ui.settings.toggle.classList.toggle('active', state.activePanel === 'settings');
+        ui.settings.toggle.setAttribute('aria-expanded', state.activePanel === 'settings');
+
+        // 2. Palette
+        ui.palette.container.style.display = state.paletteVisible ? 'flex' : 'none';
+
+        // 3. API Key Status
+        if (state.keyStatus.active) {
+            ui.keyStatusIndicator.classList.add('active');
+            ui.keyStatusIndicator.title = `API Key Status: Active (${state.keyStatus.activeName || 'Default'})`;
+            ui.contextHeader.classList.remove('key-missing');
+        } else {
+            ui.keyStatusIndicator.classList.remove('active');
+            ui.keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Click manage button to configure.';
+            ui.contextHeader.classList.add('key-missing');
+        }
+
+        // 4. Generating State
+        ui.promptInput.disabled = state.isGenerating;
+        ui.sendButton.disabled = false; // Always enabled for stop
+        if (state.isGenerating) {
+            ui.sendButton.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>`;
+            ui.sendButton.title = "Stop Generation";
+            ui.sendButton.classList.add('stop-button');
+        } else {
+            ui.sendButton.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+            ui.sendButton.title = "Send Prompt (Arrow Icon)";
+            ui.sendButton.classList.remove('stop-button');
+        }
+
+        // 5. Context Files
+        renderContextFileList();
+        
+        // 6. Active File
+        if (state.context.activeFileName) {
+            ui.activeFileIndicator.textContent = `Active: ${state.context.activeFileName}`;
+            ui.activeFileIndicator.style.display = 'inline-block';
+        } else {
+            ui.activeFileIndicator.style.display = 'none';
+        }
+
+        // 7. Config UI
+        ui.settings.chatModelSelect.value = state.config.chatModel;
+        ui.settings.inlineModelSelect.value = state.config.inlineModel;
+        ui.settings.debounceInput.value = state.config.debounceMs;
+
+        // 8. Key List (R6)
+        renderKeyList();
+    }
+
+    function renderContextFileList() {
+        const fragment = document.createDocumentFragment();
+        state.context.files.forEach(uriPath => {
+            const fileName = uriPath.split(/[\/\\]/).pop();
+            const listItem = document.createElement('li');
+            listItem.className = 'context-file-tag';
+            listItem.innerHTML = `
+                <span title="${uriPath}">${fileName}</span>
+                <button class="remove-context-file" data-uri="${uriPath}" title="Remove Context File">&times;</button>
+            `;
+            fragment.appendChild(listItem);
+        });
+        ui.contextFileList.innerHTML = '';
+        ui.contextFileList.appendChild(fragment);
+    }
+
+    function renderKeyList() {
+        ui.keyManagement.list.innerHTML = '';
+        if (state.keyDetails.keys.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'No keys stored.';
+            li.classList.add('key-item');
+            ui.keyManagement.list.appendChild(li);
+        } else {
+            state.keyDetails.keys.forEach(key => {
+                const li = document.createElement('li');
+                li.classList.add('key-item');
+                if (key.isActive) li.classList.add('active');
+                li.setAttribute('data-name', key.name);
+                li.innerHTML = `
+                    <span class="key-name" title="${key.name}">${key.name}</span>
+                    <div class="key-actions">
+                        ${!key.isActive ? `<button class="key-select-button">Set Active</button>` : `<span class="active-badge">Active</span>`}
+                        <button class="key-delete-button">&times;</button>
+                    </div>
+                `;
+                ui.keyManagement.list.appendChild(li);
+            });
+        }
+    }
+
+    // --- Helpers ---
     const initialWelcomeMessage = `
         <div class="message system">
             <p>Hello! I am Gemini, your expert coding assistant.</p>
             <p>Here are my key functionalities:</p>
             <ul>
-                <li><b>Inline Code Completion:</b> Start typing in any editor to receive real-time, context-aware suggestions (Configurable via <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/><path d="M6 12L6.01 12"/><path d="M18 8L18.01 8"/><path d="M12 16L12.01 16"/></svg> Settings).</li>
-                <li><b>Code Chat:</b> Ask questions, generate, or refactor code here. Select code in the editor to provide context.</li>
-                <li><b>Context Files:</b> Use the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> icon to add external files to the chat context.</li>
-                <li><b>Command Palette:</b> Quickly access structured commands (e.g., <code>/refactor</code>, <code>/test</code>) using the shortcut: <code>Ctrl+Alt+H</code> (<code>Cmd+Alt+H</code> on Mac).</li>
-                <li><b>Action Blocks:</b> Responses include <code>--- FIND --- / --- REPLACE ---</code> blocks or standard code blocks with buttons for one-click application to the editor.</li>
+                <li><b>Inline Code Completion:</b> Real-time suggestions. Adjust model and latency in Settings.</li>
+                <li><b>Code Chat:</b> Ask questions or refactor code. Selection is used as context.</li>
+                <li><b>Context Management:</b> Add specific files or use auto-detection for project dependencies.</li>
+                <li><b>Command Palette (Ctrl+Alt+H):</b> Access structured commands like <code>/refactor</code> or <code>/test</code>.</li>
+                <li><b>Action Blocks:</b> AI-suggested changes come in structured diff blocks.
+                    <ul>
+                        <li><b>Apply to Active File:</b> Automatically replaces the code in your current file.</li>
+                        <li><b>Send to Global Search:</b> Populates the VS Code global search/replace tool. Recommended for workspace-wide review.</li>
+                    </ul>
+                </li>
             </ul>
-            <p>Ensure your API Key is active via the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 7a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9v-.09A1.65 1.65 0 0 0 11 2h2a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg> API Key Management button before starting.</p>
         </div>`;
 
     function saveChatHistory() {
-        // Post the history to the extension host for persistence
-        postMessage('saveChatHistory', { history: chatHistory.innerHTML });
+        postMessage('saveChatHistory', { history: ui.chatHistory.innerHTML });
     }
 
-    // Utility to post a message to the extension host (extension.ts)
     const postMessage = (command, payload = {}) => {
         vscode.postMessage({ command, ...payload });
     };
 
-    // --- F1: New Chat Session ---
-    newChatButton.addEventListener('click', () => {
-        postMessage('newChat');
+    // --- Event Listeners ---
+    ui.newChatButton.addEventListener('click', () => postMessage('requestNewChatConfirmation'));
+
+    ui.keyManagement.toggle.addEventListener('click', () => {
+        const next = state.activePanel === 'keyManagement' ? null : 'keyManagement';
+        if (next) postMessage('requestKeyManagementDetails');
+        updateState({ activePanel: next, paletteVisible: false });
+        if (next) setTimeout(() => ui.keyManagement.panel.querySelector('button, input').focus(), 50);
     });
 
-    const updateToggleStates = () => {
-        const keyVisible = keyManagementPanel.style.display === 'flex';
-        const settingsVisible = settingsPanel.style.display === 'flex';
-        
-        keyManagementToggle.classList.toggle('active', keyVisible);
-        keyManagementToggle.setAttribute('aria-expanded', keyVisible);
-        
-        settingsToggle.classList.toggle('active', settingsVisible);
-        settingsToggle.setAttribute('aria-expanded', settingsVisible);
-    };
-
-    // R6: Key Management Toggle
-    keyManagementToggle.addEventListener('click', () => {
-        const isCurrentlyVisible = keyManagementPanel.style.display === 'flex';
-        settingsPanel.style.display = 'none';
-        
-        if (!isCurrentlyVisible) {
-            postMessage('requestKeyManagementDetails');
-            keyManagementPanel.style.display = 'flex';
-            // Accessibility: Focus first interactive element in panel
-            setTimeout(() => keyManagementPanel.querySelector('button, input').focus(), 50);
-        } else {
-            keyManagementPanel.style.display = 'none';
-        }
-        updateToggleStates();
-        togglePalette(false);
+    ui.settings.toggle.addEventListener('click', () => {
+        const next = state.activePanel === 'settings' ? null : 'settings';
+        if (next) postMessage('requestSettingsDetails');
+        updateState({ activePanel: next, paletteVisible: false });
+        if (next) setTimeout(() => ui.settings.panel.querySelector('button, select').focus(), 50);
     });
 
-    // NEW: Settings Toggle
-    settingsToggle.addEventListener('click', () => {
-        const isCurrentlyVisible = settingsPanel.style.display === 'flex';
-        keyManagementPanel.style.display = 'none';
-
-        if (!isCurrentlyVisible) {
-            postMessage('requestSettingsDetails');
-            settingsPanel.style.display = 'flex';
-            // Accessibility: Focus first interactive element in panel
-            setTimeout(() => settingsPanel.querySelector('button, select').focus(), 50);
-        } else {
-            settingsPanel.style.display = 'none';
-        }
-        updateToggleStates();
-        togglePalette(false);
-    });
-
-    // Panel Keyboard Navigation
-    [keyManagementPanel, settingsPanel].forEach(panel => {
+    [ui.keyManagement.panel, ui.settings.panel].forEach(panel => {
         panel.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                panel.style.display = 'none';
-                updateToggleStates();
-                // Return focus to the toggle that opened it
-                if (panel === keyManagementPanel) keyManagementToggle.focus();
-                else settingsToggle.focus();
+                updateState({ activePanel: null });
+                if (panel === ui.keyManagement.panel) ui.keyManagement.toggle.focus();
+                else ui.settings.toggle.focus();
             }
         });
     });
 
-    // Handle close buttons inside panels
     document.querySelectorAll('.panel-close-button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            keyManagementPanel.style.display = 'none';
-            settingsPanel.style.display = 'none';
-            updateToggleStates();
-        });
-    });
-    
-    // NEW: Settings Change Listeners
-    chatModelSelect.addEventListener('change', (e) => {
-        postMessage('setChatModel', { value: e.target.value });
-    });
-    inlineModelSelect.addEventListener('change', (e) => {
-        postMessage('setInlineModel', { value: e.target.value });
-    });
-    debounceInput.addEventListener('change', (e) => {
-        postMessage('setDebounceDelay', { value: e.target.value });
+        btn.addEventListener('click', () => updateState({ activePanel: null }));
     });
 
+    ui.settings.chatModelSelect.addEventListener('change', (e) => postMessage('setChatModel', { value: e.target.value }));
+    ui.settings.inlineModelSelect.addEventListener('change', (e) => postMessage('setInlineModel', { value: e.target.value }));
+    ui.settings.debounceInput.addEventListener('change', (e) => postMessage('setDebounceDelay', { value: e.target.value }));
 
-    // R6: Key Save Handler
-    keySaveButton.addEventListener('click', () => {
-        const name = keyNameInput.value;
-        const key = keyValueInput.value;
-        
+    ui.keyManagement.saveButton.addEventListener('click', () => {
+        const name = ui.keyManagement.nameInput.value;
+        const key = ui.keyManagement.valueInput.value;
         if (name && key) {
             postMessage('saveNewApiKey', { name, key });
-            // Clear value field for security, keep name for easy editing
-            keyValueInput.value = '';
-        } else {
-            // Use the status bar for feedback instead of alert in final implementation
-            vscode.postMessage({ command: 'error', content: "API Key Name and Key value must not be empty." });
+            ui.keyManagement.valueInput.value = '';
         }
     });
-    
-    // R6: Key List Actions (Select/Delete)
-    keyList.addEventListener('click', (e) => {
-        const target = e.target;
-        // Traverse up to find the nearest key item
-        const keyItem = target.closest('.key-item'); 
-        const name = keyItem?.getAttribute('data-name');
-        
+
+    ui.keyManagement.list.addEventListener('click', (e) => {
+        const name = e.target.closest('.key-item')?.getAttribute('data-name');
         if (!name) return;
-        
-        if (target.classList.contains('key-select-button')) {
-             postMessage('selectApiKey', { name });
-        } else if (target.classList.contains('key-delete-button')) {
-            postMessage('requestDeleteConfirmation', { name });
+        if (e.target.classList.contains('key-select-button')) postMessage('selectApiKey', { name });
+        else if (e.target.classList.contains('key-delete-button')) postMessage('requestDeleteConfirmation', { name });
+    });
+
+    ui.addContextFileButton.addEventListener('click', () => postMessage('addFileContext'));
+    ui.autoContextButton.addEventListener('click', () => postMessage('autoAddContext'));
+    ui.contextFileList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-context-file')) {
+            postMessage('removeFileContext', { uri: e.target.getAttribute('data-uri') });
         }
     });
 
-
-    // --- F3: Contextual File Inclusion ---
-    addContextFileButton.addEventListener('click', () => {
-        postMessage('addFileContext');
-    });
-
-    autoContextButton.addEventListener('click', () => {
-        postMessage('autoAddContext');
-    });
-    
-    contextFileList.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.classList.contains('remove-context-file')) {
-            const uri = target.getAttribute('data-uri');
-            if (uri) {
-                postMessage('removeFileContext', { uri: uri });
-            }
-        }
-    });
-
-
-    // R4: Command Palette Toggle Logic (Shortcut corresponds to package.json: Ctrl+Alt+H)
-    const togglePalette = (show) => {
-        if (show) {
-            commandPalette.style.display = 'flex';
-            paletteInput.focus();
-        } else {
-            commandPalette.style.display = 'none';
-        }
-    };
-
-    // Simulate keyboard shortcut Ctrl+Alt+H (or Cmd+Alt+H) to invoke the palette
     document.addEventListener('keydown', (e) => {
-        // Check for Ctrl/Cmd + Alt + H
         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'h') {
             e.preventDefault();
-            togglePalette(commandPalette.style.display === 'none');
-            return;
-        }
-        
-        // Hide palette on escape
-        if (e.key === 'Escape' && commandPalette.style.display === 'flex') {
-            togglePalette(false);
+            updateState({ paletteVisible: !state.paletteVisible });
+            if (state.paletteVisible) ui.palette.input.focus();
+        } else if (e.key === 'Escape' && state.paletteVisible) {
+            updateState({ paletteVisible: false });
         }
     });
-    
-    // R4: Basic Palette Filtering
-    paletteInput.addEventListener('input', () => {
-        const filter = paletteInput.value.toLowerCase();
+
+    ui.palette.input.addEventListener('input', () => {
+        const filter = ui.palette.input.value.toLowerCase();
         document.querySelectorAll('#palette-results .palette-item').forEach(item => {
-            const text = item.textContent.toLowerCase();
-            item.style.display = text.includes(filter) ? 'flex' : 'none';
+            item.style.display = item.textContent.toLowerCase().includes(filter) ? 'flex' : 'none';
         });
     });
-    
-    // R4: Command Execution from Palette
-    paletteInput.addEventListener('keydown', (e) => {
+
+    ui.palette.input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            
-            const prompt = paletteInput.value.trim();
-            if (!prompt) return;
-
-            // Send command as a prompt, then hide the palette
-            postMessage('submitPrompt', { text: prompt });
-            paletteInput.value = '';
-            togglePalette(false);
-            
-            // Show loading message in the main chat view
-            appendMessage('loading', 'Executing command...');
-
-            // Disable main input area while processing
-            promptInput.disabled = true;
-            sendButton.disabled = true;
+            const text = ui.palette.input.value.trim();
+            if (text) {
+                postMessage('submitPrompt', { text });
+                ui.palette.input.value = '';
+                updateState({ paletteVisible: false });
+                appendMessage('loading', 'Executing command...');
+            }
         }
     });
 
@@ -324,7 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                         title="Search and replace in active editor">
                                     Apply to Active File
                                 </button>
-                                <button class="action-replace" data-code="${escapeHtml(segment.replace)}">Apply Replacement</button>
                             </div>
                         </div>
                     </div>
@@ -550,65 +575,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = event.data;
         const content = message.content;
 
-        const loadingMessage = chatHistory.querySelector('.message.loading');
-        if (loadingMessage) {
-            loadingMessage.remove();
-        }
+        const loadingMessage = ui.chatHistory.querySelector('.message.loading');
+        if (loadingMessage) loadingMessage.remove();
         
-        // Re-enable inputs only AFTER a response or error is handled
         if (message.command === 'response' || message.command === 'error') {
-            setGeneratingState(false);
-            // 3. Save state after response
+            updateState({ isGenerating: false });
             saveChatHistory();
         }
 
         switch (message.command) {
             case 'updateStatus': 
-                // 1. Update Active File Indicator
-                updateActiveFileIndicator(message.activeFile);
-                
-                // 4. Handle Key Status
-                if (message.keyStatus) {
-                    keyStatusIndicator.classList.add('active');
-                    keyStatusIndicator.title = `API Key Status: Active (${message.activeKeyName || 'Default'})`;
-                    contextHeader.classList.remove('key-missing'); 
-                } else {
-                    keyStatusIndicator.classList.remove('active');
-                    keyStatusIndicator.title = 'API Key Status: Missing/Invalid. Click manage button to configure.';
-                    contextHeader.classList.add('key-missing'); 
-                }
-                updateContextFileList(message.contextFiles || []);
+                updateState({
+                    keyStatus: { active: message.keyStatus, activeName: message.activeKeyName },
+                    context: { files: message.contextFiles || [], activeFileName: message.activeFile },
+                    config: message.config || state.config
+                });
 
-                // Load Chat History if provided and current view is just initialized
-                if (message.chatHistory && chatHistory.children.length <= 1 && chatHistory.querySelector('.message.system')) {
-                    chatHistory.innerHTML = message.chatHistory;
-                    attachCodeActionListeners(); // Re-attach listeners to restored buttons
-                } else if (!chatHistory.innerHTML.trim()) {
-                     chatHistory.innerHTML = initialWelcomeMessage;
-                }
-                
-                // NEW: Update Settings UI if config data is present
-                if (message.config) {
-                    chatModelSelect.value = message.config.chatModel;
-                    inlineModelSelect.value = message.config.inlineModel;
-                    debounceInput.value = message.config.debounceMs;
+                if (message.chatHistory && ui.chatHistory.children.length <= 1 && ui.chatHistory.querySelector('.message.system')) {
+                    ui.chatHistory.innerHTML = message.chatHistory;
+                    attachCodeActionListeners();
+                } else if (!ui.chatHistory.innerHTML.trim()) {
+                     ui.chatHistory.innerHTML = initialWelcomeMessage;
                 }
                 break;
             
-            case 'keyManagementDetails': // R6: Handle key list update
-                updateKeyManagementDetails(message.keys, message.activeName);
+            case 'keyManagementDetails':
+                updateState({ keyDetails: { keys: message.keys, activeName: message.activeName } });
                 break;
             
             case 'newChatConfirm':
-                chatHistory.innerHTML = initialWelcomeMessage;
+                ui.chatHistory.innerHTML = initialWelcomeMessage;
                 break;
             
             case 'openPalette':
-                togglePalette(true);
+                updateState({ paletteVisible: true });
+                ui.palette.input.focus();
                 break;
                 
             case 'loading':
-                setGeneratingState(true);
+                updateState({ isGenerating: true });
                 appendMessage('loading', content);
                 break;
             case 'response':
@@ -620,96 +625,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 appendMessage('error', content);
                 break;
         }
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        ui.chatHistory.scrollTop = ui.chatHistory.scrollHeight;
         
-        // Auto-resize prompt input area 
-        promptInput.style.height = '28px';
-        promptInput.style.height = Math.min(promptInput.scrollHeight, 250) + 'px';
+        ui.promptInput.style.height = '28px';
+        ui.promptInput.style.height = Math.min(ui.promptInput.scrollHeight, 250) + 'px';
     });
     
     // Initial auto-resize setup and listener
-    promptInput.addEventListener('input', () => {
-        promptInput.style.height = '28px';
-        promptInput.style.height = Math.min(promptInput.scrollHeight, 250) + 'px';
-        // Check for quick trigger: #/@ followed by optional whitespace
-        const value = promptInput.value.trim();
-        if (value.startsWith('#/@')) {
-            // Clear input and trigger file selection
-            promptInput.value = '';
+    ui.promptInput.addEventListener('input', () => {
+        ui.promptInput.style.height = '28px';
+        ui.promptInput.style.height = Math.min(ui.promptInput.scrollHeight, 250) + 'px';
+        if (ui.promptInput.value.trim().startsWith('#/@')) {
+            ui.promptInput.value = '';
             postMessage('addFileContext');
-            
-            // Send feedback to user
             appendMessage('loading', 'Opening file selection dialog...');
-            
-            // Stop processing the input event further
             return;
         }
-        
-        promptInput.style.height = 'auto';
-        promptInput.style.height = (promptInput.scrollHeight) + 'px';
     });
 
-
-    // Handle user input
-    sendButton.addEventListener('click', () => {
-        sendMessage();
-    });
-
-    promptInput.addEventListener('keydown', (e) => {
+    ui.sendButton.addEventListener('click', () => sendMessage());
+    ui.promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
         }
     });
 
-    function sendMessage() {
-        if (isGenerating) {
+    function sendMessage(retryPrompt = null) {
+        const isRetry = retryPrompt !== null;
+        if (state.isGenerating) {
             postMessage('stopGeneration');
-            setGeneratingState(false);
+            updateState({ isGenerating: false });
             return;
         }
-
-        const prompt = promptInput.value.trim();
+        const prompt = isRetry ? retryPrompt : ui.promptInput.value.trim();
         if (!prompt) return;
 
-        appendMessage('user', prompt);
+        if (!isRetry) {
+            appendMessage('user', prompt);
+            ui.promptInput.value = '';
+            ui.promptInput.style.height = 'auto';
+        }
         
-        // Reset height and disable input while request is pending
-        promptInput.value = '';
-        promptInput.style.height = 'auto';
-        promptInput.disabled = true;
-        
+        updateState({ isGenerating: true, paletteVisible: false, lastUserPrompt: prompt });
         postMessage('submitPrompt', { text: prompt });
-        
-        // Hide palette if active when sending a message
-        togglePalette(false);
     }
     
 
     // DOM Manipulation Helpers
     function appendMessage(type, content, isText = true) {
-        const messageDiv = document.createElement('div');
-        // Handle custom styling for API key success notification
-        if (type === 'success') {
-             messageDiv.classList.add('message', 'system');
-             messageDiv.classList.add('success');
-        } else {
-            messageDiv.classList.add('message', type);
-        }
+        const div = document.createElement('div');
+        div.classList.add('message', type);
+        if (type === 'success') div.classList.add('system', 'success');
 
-        if (isText) {
-            messageDiv.textContent = content;
+        if (type === 'error' && state.lastUserPrompt) {
+            div.innerHTML = `
+                <div class="error-content">${isText ? escapeHtml(content) : content}</div>
+                <button class="retry-button">Retry Last Prompt</button>
+            `;
+            const retryBtn = div.querySelector('.retry-button');
+            retryBtn.onclick = () => {
+                div.remove(); // Clear the error message
+                sendMessage(state.lastUserPrompt);
+            };
         } else {
-            messageDiv.innerHTML = content;
+            if (isText) div.textContent = content;
+            else div.innerHTML = content;
         }
         
-        chatHistory.appendChild(messageDiv);
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        ui.chatHistory.appendChild(div);
+        ui.chatHistory.scrollTop = ui.chatHistory.scrollHeight;
 
-        // 3. Save chat history immediately after appending a user/assistant message
-        if (type === 'user' || type === 'assistant') {
-             saveChatHistory();
-        }
+        if (type === 'user' || type === 'assistant') saveChatHistory();
     }
     
     function escapeHtml(unsafe) {

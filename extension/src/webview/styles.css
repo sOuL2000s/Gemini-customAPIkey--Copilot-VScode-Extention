@@ -54,6 +54,25 @@ body {
 .message.error {
     background-color: var(--vscode-errorForeground);
     color: var(--vscode-editor-background);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.retry-button {
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-errorForeground);
+    border: 1px solid var(--vscode-errorForeground);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    align-self: flex-start;
+}
+.retry-button:hover {
+    background-color: var(--vscode-errorForeground);
+    color: var(--vscode-editor-background);
 }
 
 .message.system.success {
