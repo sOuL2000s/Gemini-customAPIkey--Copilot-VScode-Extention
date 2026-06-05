@@ -123,6 +123,24 @@
           "description": "The delay (in milliseconds) after typing stops before triggering a completion request (300ms to 700ms recommended).",
           "minimum": 100,
           "maximum": 2000
+        },
+        "gemini.context.autoDetectDepth": {
+          "type": "number",
+          "default": 1,
+          "description": "Recursive depth for dependency auto-detection (1 = direct imports only).",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "gemini.context.ignorePatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["**/node_modules/**", "**/dist/**", "**/out/**", "**/build/**", "*.vsix"],
+          "description": "Glob patterns for files/directories to exclude from context auto-detection."
+        },
+        "gemini.context.maxTokens": {
+          "type": "number",
+          "default": 1000000,
+          "description": "The maximum estimated token limit for the context window. Suggestions will be truncated beyond this."
         }
       }
     }

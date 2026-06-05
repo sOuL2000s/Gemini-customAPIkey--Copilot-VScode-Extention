@@ -14,8 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
         contextFileList: document.getElementById('context-file-list'),
         activeFileIndicator: document.getElementById('active-file-indicator'),
         addContextFileButton: document.getElementById('add-context-file-button'),
+        addContextDirButton: document.getElementById('add-context-dir-button'),
         autoContextButton: document.getElementById('auto-context-button'),
-        
+        clearContextButton: document.getElementById('clear-context-button'),
+        tokenUsage: {
+            bar: document.getElementById('token-progress-bar'),
+            label: document.getElementById('token-count-label')
+        },
         keyManagement: {
             toggle: document.getElementById('key-management-toggle'),
             panel: document.getElementById('key-management-panel'),
@@ -34,6 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
         palette: {
             container: document.getElementById('command-palette'),
             input: document.getElementById('palette-input')
+        },
+        workspaceSearch: {
+            panel: document.getElementById('workspace-search-panel'),
+            list: document.getElementById('workspace-search-list'),
+            applyButton: document.getElementById('workspace-apply-button')
         }
     };
 
@@ -56,6 +66,10 @@ document.addEventListener('DOMContentLoaded', () => {
             inlineModel: 'gemini-2.5-flash-lite',
             debounceMs: 500
         },
+        tokens: {
+            current: 0,
+            max: 1000000
+        },
         keyDetails: {
             keys: [],
             activeName: ''
@@ -71,6 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Panels and Toggles
         ui.keyManagement.panel.style.display = state.activePanel === 'keyManagement' ? 'flex' : 'none';
         ui.settings.panel.style.display = state.activePanel === 'settings' ? 'flex' : 'none';
+        
+        if (ui.workspaceSearch.panel) {
+            ui.workspaceSearch.panel.style.display = state.activePanel === 'workspaceSearch' ? 'flex' : 'none';
+        }
         
         ui.keyManagement.toggle.classList.toggle('active', state.activePanel === 'keyManagement');
         ui.keyManagement.toggle.setAttribute('aria-expanded', state.activePanel === 'keyManagement');
@@ -122,6 +140,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 8. Key List (R6)
         renderKeyList();
+
+        // 9. Token Monitor
+        const percent = Math.min(100, (state.tokens.current / state.tokens.max) * 100);
+        ui.tokenUsage.bar.style.width = `${percent}%`;
+        
+        const formatTokens = (val) => val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : `${(val / 1000).toFixed(1)}k`;
+        ui.tokenUsage.label.textContent = `${formatTokens(state.tokens.current)} / ${formatTokens(state.tokens.max)}`;
+        
+        ui.tokenUsage.bar.style.backgroundColor = percent > 90 ? 'var(--vscode-statusBarItem-errorBackground)' : (percent > 70 ? 'var(--vscode-statusBarItem-warningBackground)' : 'var(--vscode-statusBarItem-prominentBackground)');
     }
 
     function renderContextFileList() {
@@ -244,7 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     ui.addContextFileButton.addEventListener('click', () => postMessage('addFileContext'));
+    ui.addContextDirButton.addEventListener('click', () => postMessage('addDirectoryContext'));
     ui.autoContextButton.addEventListener('click', () => postMessage('autoAddContext'));
+    ui.clearContextButton.addEventListener('click', () => postMessage('clearAllContext'));
     ui.contextFileList.addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-context-file')) {
             postMessage('removeFileContext', { uri: e.target.getAttribute('data-uri') });
@@ -281,6 +310,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+
+    function generateDiffPreview(find, replace) {
+        const findLines = find.split('\n');
+        const replaceLines = replace.split('\n');
+        let html = '<div class="diff-preview-container">';
+        
+        // Simplified diff visualization
+        findLines.forEach(line => {
+            if (line.trim() || findLines.length === 1) {
+                html += `<div class="diff-line removed"><span class="diff-sign">-</span>${escapeHtml(line)}</div>`;
+            }
+        });
+        replaceLines.forEach(line => {
+            if (line.trim() || replaceLines.length === 1) {
+                html += `<div class="diff-line added"><span class="diff-sign">+</span>${escapeHtml(line)}</div>`;
+            }
+        });
+        
+        html += '</div>';
+        return html;
+    }
 
     // R2 & R3: Enhanced formatting for Code Responses (Handling FIND/REPLACE blocks)
     function formatResponse(responseText) {
@@ -326,32 +376,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 formattedHtml += `
                     <div class="code-diff-block">
                         <div class="diff-header code-header">
-                            <span>--- FIND ---</span>
-                            <button class="copy-button" data-code="${escapeHtml(segment.find)}" title="Copy FIND block">Copy</button>
+                            <span>Proposed Changes</span>
                         </div>
-                        <div class="find-block">
-                            <pre>${escapeHtml(segment.find)}</pre>
+                        ${generateDiffPreview(segment.find, segment.replace)}
+                        <div class="code-actions">
+                            <button class="action-apply-to-active" 
+                                    data-find="${escapeHtml(segment.find)}" 
+                                    data-replace="${escapeHtml(segment.replace)}" 
+                                    title="Search and replace in active editor">
+                                Apply to Active File
+                            </button>
+                            <button class="action-search-workspace" 
+                                    data-find="${escapeHtml(segment.find)}" 
+                                    data-replace="${escapeHtml(segment.replace)}">
+                                Search Workspace & Apply
+                            </button>
+                            <button class="action-global-search" 
+                                    data-find="${escapeHtml(segment.find)}" 
+                                    data-replace="${escapeHtml(segment.replace)}">
+                                Send to Search View
+                            </button>
                         </div>
-                        <div class="diff-header code-header">
-                            <span>--- REPLACE ---</span>
-                            <button class="copy-button" data-code="${escapeHtml(segment.replace)}" title="Copy REPLACE block">Copy</button>
-                        </div>
-                        <div class="replace-block">
-                            <pre>${escapeHtml(segment.replace)}</pre>
-                            <div class="code-actions">
-                                <button class="action-global-search" 
-                                        data-find="${escapeHtml(segment.find)}" 
-                                        data-replace="${escapeHtml(segment.replace)}">
-                                    Send to Global Search
-                                </button>
-                                <button class="action-apply-to-active" 
-                                        data-find="${escapeHtml(segment.find)}" 
-                                        data-replace="${escapeHtml(segment.replace)}" 
-                                        title="Search and replace in active editor">
-                                    Apply to Active File
-                                </button>
+                        <details class="raw-diff-details">
+                            <summary>View Raw FIND/REPLACE blocks</summary>
+                            <div class="find-block">
+                                <div class="diff-header">--- FIND ---</div>
+                                <pre>${escapeHtml(segment.find)}</pre>
                             </div>
-                        </div>
+                            <div class="replace-block">
+                                <div class="diff-header">--- REPLACE ---</div>
+                                <pre>${escapeHtml(segment.replace)}</pre>
+                            </div>
+                        </details>
                     </div>
                 `;
             } else if (segment.type === 'text') {
@@ -509,6 +565,14 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
+        document.querySelectorAll('.action-search-workspace').forEach(button => {
+            button.onclick = (e) => {
+                const find = e.currentTarget.getAttribute('data-find');
+                const replace = e.currentTarget.getAttribute('data-replace');
+                postMessage('searchWorkspace', { find, replace });
+            };
+        });
+
         // NEW: Listener for "Apply to Active File" button
         document.querySelectorAll('.action-apply-to-active').forEach(button => {
             button.onclick = (e) => {
@@ -578,17 +642,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadingMessage = ui.chatHistory.querySelector('.message.loading');
         if (loadingMessage) loadingMessage.remove();
         
-        if (message.command === 'response' || message.command === 'error') {
+        if (message.command === 'response' || message.command === 'error' || message.command === 'success' || message.command === 'multiFileActionSuccess') {
             updateState({ isGenerating: false });
-            saveChatHistory();
+            if (message.command !== 'success' && message.command !== 'multiFileActionSuccess') saveChatHistory();
         }
 
         switch (message.command) {
+            case 'multiFileActionSuccess':
+                appendMultiFileSuccessMessage(message.content, message.canUndo);
+                break;
+            case 'updateUndoStatus':
+                const undoBtns = ui.chatHistory.querySelectorAll('.multi-undo-button');
+                undoBtns.forEach(btn => btn.remove());
+                break;
+            case 'workspaceSearchResults':
+                updateState({ 
+                    activePanel: 'workspaceSearch',
+                    workspaceSearch: { find: message.find, replace: message.replace, results: message.results }
+                });
+                renderWorkspaceSearchResults();
+                break;
+
+            case 'insertionPoints':
+                renderInsertionPoints(message.points);
+                break;
+
             case 'updateStatus': 
                 updateState({
                     keyStatus: { active: message.keyStatus, activeName: message.activeKeyName },
                     context: { files: message.contextFiles || [], activeFileName: message.activeFile },
-                    config: message.config || state.config
+                    config: message.config || state.config,
+                    tokens: { current: message.estimatedTokens || 0, max: message.maxTokens || 1000000 }
                 });
 
                 if (message.chatHistory && ui.chatHistory.children.length <= 1 && ui.chatHistory.querySelector('.message.system')) {
@@ -620,6 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formattedHtml = formatResponse(content);
                 appendMessage('assistant', formattedHtml, false); 
                 attachCodeActionListeners();
+                break;
+            case 'success':
+                appendMessage('success', content);
                 break;
             case 'error':
                 appendMessage('error', content);
@@ -672,6 +759,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 
+    function appendMultiFileSuccessMessage(content, canUndo) {
+        const div = document.createElement('div');
+        div.classList.add('message', 'system', 'success');
+        div.innerHTML = `
+            <div class="success-content">${escapeHtml(content)}</div>
+            ${canUndo ? '<button class="multi-undo-button">Undo Global Changes</button>' : ''}
+        `;
+        if (canUndo) {
+            div.querySelector('.multi-undo-button').onclick = (e) => {
+                postMessage('undoLastMultiFileEdit');
+                e.target.remove();
+            };
+        }
+        ui.chatHistory.appendChild(div);
+        ui.chatHistory.scrollTop = ui.chatHistory.scrollHeight;
+        saveChatHistory();
+    }
+
     // DOM Manipulation Helpers
     function appendMessage(type, content, isText = true) {
         const div = document.createElement('div');
@@ -699,6 +804,65 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'user' || type === 'assistant') saveChatHistory();
     }
     
+    function renderWorkspaceSearchResults() {
+        const { results, find, replace } = state.workspaceSearch;
+        ui.workspaceSearch.list.innerHTML = '';
+        
+        if (results.length === 0) {
+            ui.workspaceSearch.list.innerHTML = '<li class="key-item">No matches found in workspace.</li>';
+            ui.workspaceSearch.applyButton.disabled = true;
+            return;
+        }
+
+        ui.workspaceSearch.applyButton.disabled = false;
+        results.forEach((res, idx) => {
+            const li = document.createElement('li');
+            li.className = 'workspace-result-item';
+            li.innerHTML = `
+                <label>
+                    <input type="checkbox" checked data-path="${res.path}">
+                    <span class="file-path">${res.relativePath}</span>
+                </label>
+                <div class="preview-mini">${generateDiffPreview(find, replace)}</div>
+            `;
+            ui.workspaceSearch.list.appendChild(li);
+        });
+
+        ui.workspaceSearch.applyButton.onclick = () => {
+            const selected = Array.from(ui.workspaceSearch.list.querySelectorAll('input:checked'))
+                .map(cb => cb.getAttribute('data-path'));
+            postMessage('applyToSelectedFiles', { files: selected, find, replace });
+            updateState({ activePanel: null });
+        };
+    }
+
+    function renderInsertionPoints(points) {
+        // Find the last assistant message and add insertion buttons if it contains code
+        const lastMsg = ui.chatHistory.querySelector('.assistant:last-child');
+        if (!lastMsg) return;
+
+        const codeBlocks = lastMsg.querySelectorAll('.code-block');
+        codeBlocks.forEach(block => {
+            const actions = block.querySelector('.code-actions');
+            if (actions && !actions.querySelector('.insertion-points-container')) {
+                const container = document.createElement('div');
+                container.className = 'insertion-points-container';
+                points.forEach(p => {
+                    const btn = document.createElement('button');
+                    btn.className = 'action-insert-at';
+                    btn.textContent = `Insert: ${p.label}`;
+                    btn.onclick = () => {
+                        const code = block.querySelector('.copy-button').getAttribute('data-code');
+                        // We would need a new command here to insert at specific line
+                        console.log("Planned: Insert at", p.line);
+                    };
+                    container.appendChild(btn);
+                });
+                actions.appendChild(container);
+            }
+        });
+    }
+
     function escapeHtml(unsafe) {
         return unsafe
              .replace(/&/g, "&amp;")

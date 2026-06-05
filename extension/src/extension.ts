@@ -34,6 +34,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private chatModel: string;
     private contextFiles: Map<string, string> = new Map(); 
     private activeFileName: string | null = null; // 1. Track active file
+    private lastMultiFileEdit: { [path: string]: string } | null = null; 
     
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -80,26 +81,40 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
 
+    private estimateTokens(text: string): number {
+        // Crude approximation: ~4 characters per token for typical code/english
+        return Math.ceil(text.length / 4);
+    }
+
     private postViewStatus() {
         if (this._view) {
             const activeKeyName = this.secretManager.getActiveKeyName() || null;
             const chatHistory = this.globalState.get<string>('geminiLocalCoderChatHistory', '');
             
+            let currentContextText = "";
+            for (const content of this.contextFiles.values()) {
+                currentContextText += content;
+            }
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor) {
+                currentContextText += activeEditor.document.getText();
+            }
+
             this._view.webview.postMessage({ 
                 command: 'updateStatus', 
                 keyStatus: this.apiAgent !== null,
                 contextFiles: Array.from(this.contextFiles.keys()),
-                activeFile: this.activeFileName, // 1. Pass active file name
-                activeKeyName: activeKeyName, // NEW: Pass active key name
-                chatHistory: chatHistory, // Pass persisted history
-                // NEW: Configuration Status
+                activeFile: this.activeFileName,
+                activeKeyName: activeKeyName,
+                chatHistory: chatHistory,
+                estimatedTokens: this.estimateTokens(currentContextText),
+                maxTokens: ConfigurationManager.getMaxTokens(),
                 config: {
                     chatModel: ConfigurationManager.getChatModel(),
                     inlineModel: ConfigurationManager.getInlineModel(),
                     debounceMs: ConfigurationManager.getDebounceDelay()
                 }
             });
-            // Also notify the webview immediately about key management details if panel is open
             this.sendKeyManagementDetails();
         }
     }
@@ -197,8 +212,14 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'addFileContext':
                     this.handleAddFileContext();
                     return;
+                case 'addDirectoryContext':
+                    this.handleAddDirectoryContext();
+                    return;
                 case 'autoAddContext':
                     this.autoDetectContext();
+                    return;
+                case 'clearAllContext':
+                    this.handleClearAllContext();
                     return;
                 case 'removeFileContext':
                     this.handleRemoveFileContext(message.uri);
@@ -220,8 +241,164 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'applyFindReplace': // NEW: Handle direct find/replace in active file
                     this.handleApplyFindReplace(message.find, message.replace);
                     return;
+                case 'searchWorkspace':
+                    this.handleSearchWorkspace(message.find, message.replace);
+                    return;
+                case 'applyToSelectedFiles':
+                    this.handleApplyToSelectedFiles(message.files, message.find, message.replace);
+                    return;
+                case 'undoLastMultiFileEdit':
+                    this.handleUndoLastMultiFileEdit();
+                    return;
+                case 'getInsertionPoints':
+                    this.handleGetInsertionPoints();
+                    return;
             }
         });
+    }
+
+    private async handleSearchWorkspace(find: string, replace: string) {
+        this.sendMessageToWebview('loading', 'Searching workspace...');
+        const findLF = find.replace(/\r\n/g, '\n');
+        const results: { path: string, relativePath: string }[] = [];
+        
+        // Search across all files excluding ignore patterns
+        const ignorePatterns = ConfigurationManager.getIgnorePatterns();
+        const files = await vscode.workspace.findFiles('**/*', `{${ignorePatterns.join(',')}}`);
+        
+        for (const fileUri of files) {
+            try {
+                const doc = await vscode.workspace.openTextDocument(fileUri);
+                const match = await FindReplaceStrategy.findMatchingRange(doc, findLF);
+                if (match) {
+                    results.push({ 
+                        path: fileUri.fsPath,
+                        relativePath: vscode.workspace.asRelativePath(fileUri)
+                    });
+                }
+            } catch (e) {}
+        }
+
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: 'workspaceSearchResults',
+                results,
+                find,
+                replace
+            });
+        }
+    }
+
+    private async handleApplyToSelectedFiles(filePaths: string[], find: string, replace: string) {
+        const findLF = find.replace(/\r\n/g, '\n');
+        const replaceLF = replace.replace(/\r\n/g, '\n');
+        const edit = new vscode.WorkspaceEdit();
+        const undoMap: { [path: string]: string } = {};
+        let matchCount = 0;
+
+        for (const filePath of filePaths) {
+            try {
+                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+                const match = await FindReplaceStrategy.findMatchingRange(doc, findLF);
+                if (match) {
+                    undoMap[filePath] = doc.getText();
+                    edit.replace(doc.uri, match.range, replaceLF);
+                    matchCount++;
+                }
+            } catch (e) {
+                console.error(`Failed to prepare edit for ${filePath}:`, e);
+            }
+        }
+
+        if (matchCount > 0) {
+            const success = await vscode.workspace.applyEdit(edit);
+            if (success) {
+                this.lastMultiFileEdit = undoMap;
+                if (this._view) {
+                    this._view.webview.postMessage({ 
+                        command: 'multiFileActionSuccess', 
+                        content: `Applied changes to ${matchCount} file(s).`,
+                        canUndo: true 
+                    });
+                }
+            } else {
+                this.sendMessageToWebview('error', 'Failed to apply workspace edits.');
+            }
+        } else {
+            this.sendMessageToWebview('error', 'No matches found in the selected files.');
+        }
+    }
+
+    private async handleUndoLastMultiFileEdit() {
+        if (!this.lastMultiFileEdit) {
+            this.sendMessageToWebview('error', 'No multi-file edit history found to undo.');
+            return;
+        }
+
+        const edit = new vscode.WorkspaceEdit();
+        let fileCount = 0;
+
+        for (const [filePath, originalContent] of Object.entries(this.lastMultiFileEdit)) {
+            try {
+                const uri = vscode.Uri.file(filePath);
+                const doc = await vscode.workspace.openTextDocument(uri);
+                const fullRange = new vscode.Range(
+                    doc.positionAt(0),
+                    doc.positionAt(doc.getText().length)
+                );
+                edit.replace(uri, fullRange, originalContent);
+                fileCount++;
+            } catch (e) {
+                console.error(`Failed to revert ${filePath}:`, e);
+            }
+        }
+
+        const success = await vscode.workspace.applyEdit(edit);
+        if (success) {
+            this.lastMultiFileEdit = null;
+            this.sendMessageToWebview('success', `Reverted changes in ${fileCount} file(s).`);
+            if (this._view) {
+                this._view.webview.postMessage({ command: 'updateUndoStatus', canUndo: false });
+            }
+        } else {
+            this.sendMessageToWebview('error', 'Failed to undo workspace edits.');
+        }
+    }
+
+    private handleGetInsertionPoints() {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const doc = editor.document;
+        const text = doc.getText();
+        const points: { label: string, line: number, character: number }[] = [];
+
+        // 1. After imports
+        const lines = text.split('\n');
+        let lastImportLine = -1;
+        const importRegex = /^(import|from|require|const.*require)/;
+        for (let i = 0; i < lines.length; i++) {
+            if (importRegex.test(lines[i].trim())) {
+                lastImportLine = i;
+            } else if (lines[i].trim() === '' && lastImportLine !== -1) {
+                // Keep looking until we find non-empty, non-import line
+            } else if (lastImportLine !== -1) {
+                break; 
+            }
+        }
+        if (lastImportLine !== -1) {
+            points.push({ label: 'After Imports', line: lastImportLine + 1, character: 0 });
+        }
+
+        // 2. End of file
+        points.push({ label: 'End of File', line: doc.lineCount, character: 0 });
+
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: 'insertionPoints',
+                points
+            });
+        }
     }
     
     private async handleNewChatConfirmation() {
@@ -415,6 +592,52 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         this.postViewStatus();
     }
 
+    private handleClearAllContext() {
+        if (this.contextFiles.size === 0) return;
+        this.contextFiles.clear();
+        this.postViewStatus();
+        this.sendMessageToWebview('success', 'All context files cleared.');
+    }
+
+    private async handleAddDirectoryContext() {
+        const options: vscode.OpenDialogOptions = {
+            canSelectMany: false,
+            openLabel: 'Select directory for context',
+            canSelectFolders: true,
+            canSelectFiles: false
+        };
+
+        const folderUris = await vscode.window.showOpenDialog(options);
+        if (folderUris && folderUris.length > 0) {
+            const folderUri = folderUris[0];
+            const ignorePatterns = ConfigurationManager.getIgnorePatterns();
+            const relativePattern = new vscode.RelativePattern(folderUri, '**/*');
+            const files = await vscode.workspace.findFiles(relativePattern, `{${ignorePatterns.join(',')}}`);
+
+            let filesAdded = 0;
+            for (const uri of files) {
+                try {
+                    const stat = await vscode.workspace.fs.stat(uri);
+                    if (stat.type !== vscode.FileType.File) continue;
+
+                    const contentBytes = await vscode.workspace.fs.readFile(uri);
+                    const content = Buffer.from(contentBytes).toString('utf8');
+                    
+                    if (content.length <= 50000 && !this.contextFiles.has(uri.fsPath)) {
+                        this.contextFiles.set(uri.fsPath, content);
+                        filesAdded++;
+                    }
+                } catch (e) {
+                    console.error("Failed to read directory file:", e);
+                }
+            }
+            if (filesAdded > 0) {
+                this.postViewStatus();
+                this.sendMessageToWebview('success', `Added ${filesAdded} file(s) from directory to context.`);
+            }
+        }
+    }
+
     private async autoDetectContext() {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -422,103 +645,81 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const document = editor.document;
-        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-        const text = document.getText();
-        const detectedTerms = new Set<string>();
-
-        // ESM/TS imports and exports
-        const jsRegex = /(?:import|export)\s+.*?\s+from\s+['"](.*?)['"]/g;
-        // CommonJS require
-        const cjsRegex = /require\(['"](.*?)['"]\)/g;
-        // Python imports
-        const pyFromRegex = /from\s+([\w.]+)\s+import/g;
-        const pyImportRegex = /^import\s+([\w.]+)/gm;
-
-        let match;
-        while ((match = jsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
-        while ((match = cjsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
-        while ((match = pyFromRegex.exec(text)) !== null) detectedTerms.add(match[1]);
-        while ((match = pyImportRegex.exec(text)) !== null) detectedTerms.add(match[1]);
-
-        this.sendMessageToWebview('loading', 'Scanning for related files...');
+        this.sendMessageToWebview('loading', 'Scanning dependency graph...');
+        const maxDepth = ConfigurationManager.getAutoDetectDepth();
+        const processedFiles = new Set<string>();
+        const filesToProcess = [editor.document.uri];
         let filesAdded = 0;
-        const currentDir = path.dirname(document.uri.fsPath);
 
-        // 1. Add key config files if they exist in workspace root
-        if (workspaceFolder) {
-            const configFiles = ['tsconfig.json', 'package.json', 'requirements.txt', 'pyproject.toml', '.env.example'];
-            for (const cfg of configFiles) {
-                const cfgUri = vscode.Uri.joinPath(workspaceFolder.uri, cfg);
-                try {
-                    await vscode.workspace.fs.stat(cfgUri);
-                    const contentBytes = await vscode.workspace.fs.readFile(cfgUri);
-                    const content = Buffer.from(contentBytes).toString('utf8');
-                    if (content.length <= 50000 && !this.contextFiles.has(cfgUri.fsPath)) {
-                        this.contextFiles.set(cfgUri.fsPath, content);
-                        filesAdded++;
-                    }
-                } catch { /* file doesn't exist */ }
-            }
-        }
+        for (let depth = 0; depth < maxDepth; depth++) {
+            const nextBatch: vscode.Uri[] = [];
+            for (const uri of filesToProcess) {
+                if (processedFiles.has(uri.fsPath)) continue;
+                processedFiles.add(uri.fsPath);
 
-        // 2. Resolve detected terms
-        for (const term of detectedTerms) {
-            let targetUris: vscode.Uri[] = [];
-
-            if (term.startsWith('.')) {
-                // Relative path resolution for JS/TS
-                const resolvedPath = path.resolve(currentDir, term);
-                const extensions = ['.ts', '.js', '.tsx', '.jsx', '.json'];
-                const potentialPaths = [resolvedPath, ...extensions.map(ext => resolvedPath + ext)];
-                
-                // Check for index files in directories
-                potentialPaths.push(path.join(resolvedPath, 'index.ts'), path.join(resolvedPath, 'index.js'));
-
-                for (const p of potentialPaths) {
-                    const uri = vscode.Uri.file(p);
-                    try {
-                        await vscode.workspace.fs.stat(uri);
-                        targetUris.push(uri);
-                        break; 
-                    } catch {}
-                }
-            } else {
-                // Named import or python dot notation
-                const cleanTerm = term.replace(/\.[jt]sx?$/, '').replace(/\./g, '/');
-                const fileName = cleanTerm.split('/').pop();
-                if (!fileName || fileName.length < 3) continue;
-
-                // Search for files matching the term across the workspace
-                const searchPattern = `**/${fileName}.{ts,js,py,tsx,jsx,json}`;
-                const found = await vscode.workspace.findFiles(searchPattern, '**/node_modules/**', 2);
-                targetUris.push(...found);
-            }
-
-            for (const uri of targetUris) {
-                if (this.contextFiles.has(uri.fsPath) || uri.fsPath === document.uri.fsPath) continue;
-                
                 try {
                     const contentBytes = await vscode.workspace.fs.readFile(uri);
-                    const content = Buffer.from(contentBytes).toString('utf8');
+                    const text = Buffer.from(contentBytes).toString('utf8');
                     
-                    if (content.length <= 100000) {
-                        this.contextFiles.set(uri.fsPath, content);
-                        filesAdded++;
+                    const detectedTerms = new Set<string>();
+                    const jsRegex = /(?:import|export)\s+.*?\s+from\s+['"](.*?)['"]/g;
+                    const cjsRegex = /require\(['"](.*?)['"]\)/g;
+                    const pyFromRegex = /from\s+([\w.]+)\s+import/g;
+                    const pyImportRegex = /^import\s+([\w.]+)/gm;
+
+                    let match;
+                    while ((match = jsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+                    while ((match = cjsRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+                    while ((match = pyFromRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+                    while ((match = pyImportRegex.exec(text)) !== null) detectedTerms.add(match[1]);
+
+                    const currentDir = path.dirname(uri.fsPath);
+                    for (const term of detectedTerms) {
+                        let foundUri: vscode.Uri | null = null;
+                        if (term.startsWith('.')) {
+                            const resolvedPath = path.resolve(currentDir, term);
+                            const extensions = ['.ts', '.js', '.tsx', '.jsx', '.py', '.json'];
+                            const potentialPaths = [resolvedPath, ...extensions.map(ext => resolvedPath + ext), path.join(resolvedPath, 'index.ts'), path.join(resolvedPath, 'index.js')];
+                            for (const p of potentialPaths) {
+                                try {
+                                    const u = vscode.Uri.file(p);
+                                    await vscode.workspace.fs.stat(u);
+                                    foundUri = u;
+                                    break;
+                                } catch {}
+                            }
+                        } else {
+                            const cleanTerm = term.replace(/\.[jt]sx?$/, '').replace(/\./g, '/');
+                            const fileName = cleanTerm.split('/').pop();
+                            if (fileName && fileName.length >= 3) {
+                                const found = await vscode.workspace.findFiles(`**/${fileName}.{ts,js,py,tsx,jsx,json}`, `**/node_modules/**`, 1);
+                                if (found.length > 0) foundUri = found[0];
+                            }
+                        }
+
+                        if (foundUri && !this.contextFiles.has(foundUri.fsPath) && foundUri.fsPath !== editor.document.uri.fsPath) {
+                            const foundBytes = await vscode.workspace.fs.readFile(foundUri);
+                            const foundContent = Buffer.from(foundBytes).toString('utf8');
+                            if (foundContent.length <= 100000) {
+                                this.contextFiles.set(foundUri.fsPath, foundContent);
+                                filesAdded++;
+                                nextBatch.push(foundUri);
+                            }
+                        }
                     }
                 } catch (e) {
-                    console.error(`Failed to auto-add file ${uri.fsPath}:`, e);
+                    console.error(`Auto-detect failed for ${uri.fsPath}:`, e);
                 }
             }
+            filesToProcess.push(...nextBatch);
+            if (nextBatch.length === 0) break;
         }
 
         if (filesAdded > 0) {
             this.postViewStatus();
             this.sendMessageToWebview('success', `Added ${filesAdded} related file(s) to context.`);
-        } else if (detectedTerms.size === 0) {
-             this.sendMessageToWebview('error', 'No obvious dependencies detected.');
         } else {
-            this.sendMessageToWebview('error', 'Could not resolve detected dependencies to local files.');
+            this.sendMessageToWebview('error', 'No new dependencies resolved.');
         }
     }
     
@@ -566,12 +767,26 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
 
             try {
                 let contextBlock = '';
+                const maxTokens = ConfigurationManager.getMaxTokens();
+                let currentEstimatedTokens = this.estimateTokens(fullDocumentContent);
+
                 contextBlock += `\n--- ACTIVE FILE CONTEXT: ${document.fileName} ---\n${fullDocumentContent}\n--- END ACTIVE FILE CONTEXT ---\n`;
 
                 if (this.contextFiles.size > 0) {
-                    for (const [path, content] of this.contextFiles.entries()) {
-                        if (path === document.uri.fsPath) continue; 
+                    const sortedFiles = Array.from(this.contextFiles.entries()).sort((a, b) => b[1].length - a[1].length); // Prioritize smaller files? Or just alphabetical.
+                    
+                    for (const [path, content] of sortedFiles) {
+                        if (path === document.uri.fsPath) continue;
+                        
+                        const fileTokens = this.estimateTokens(content);
+                        if (currentEstimatedTokens + fileTokens > maxTokens) {
+                            console.warn(`Context limit reached. Truncating context starting with: ${path}`);
+                            contextBlock += `\n--- EXTERNAL CONTEXT FILE (TRUNCATED): ${path} ---\n[File content omitted due to token limit]\n--- END EXTERNAL CONTEXT ---\n`;
+                            continue;
+                        }
+
                         contextBlock += `\n--- EXTERNAL CONTEXT FILE: ${path} ---\n${content}\n--- END EXTERNAL CONTEXT ---\n`;
+                        currentEstimatedTokens += fileTokens;
                     }
                 }
 
@@ -808,11 +1023,27 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                 </svg>
                             </button>
 
+                            <button id="add-context-dir-button" title="Add directory context">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                            </button>
+
                             <button id="auto-context-button" title="Auto-detect related files (Imports/Exports)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
                                     <line x1="16" y1="8" x2="2" y2="22"></line>
                                     <line x1="17.5" y1="15" x2="9" y2="15"></line>
+                                </svg>
+                            </button>
+
+                            <button id="clear-context-button" title="Clear all context files">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 6h18"></path>
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
                                 </svg>
                             </button>
                             
@@ -843,6 +1074,10 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                 </svg>
                             </button>
                             
+                            <div id="token-usage-monitor" title="Estimated Context Token Usage">
+                                <div id="token-progress-bar"></div>
+                                <span id="token-count-label">0 / 1M</span>
+                            </div>
                             <div id="key-status-indicator" title="API Key Status: Missing"></div>
                         </div>
                         <div id="context-summary">
@@ -870,6 +1105,18 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                         </div>
                     </div>
                     
+                    <!-- NEW: Workspace Search Panel -->
+                    <div id="workspace-search-panel" style="display: none;" role="dialog" aria-labelledby="ws-search-title">
+                        <div class="panel-section">
+                            <button class="panel-close-button" title="Close Panel">&times;</button>
+                            <h4 id="ws-search-title">Workspace Matches</h4>
+                            <ul id="workspace-search-list" style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;">
+                                <!-- Matches here -->
+                            </ul>
+                            <button id="workspace-apply-button" class="action-apply-to-active" style="margin-top: 10px; width: 100%;">Apply to Selected Files</button>
+                        </div>
+                    </div>
+
                     <!-- NEW: Settings Panel -->
                     <div id="settings-panel" style="display: none;" role="dialog" aria-labelledby="settings-title">
                         <div class="panel-section">

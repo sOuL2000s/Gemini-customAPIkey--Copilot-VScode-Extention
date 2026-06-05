@@ -58,4 +58,16 @@ export class ConfigurationManager {
         const clampedDelay = Math.max(100, Math.min(2000, delay));
         await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('latency.debounceMs', clampedDelay, this.CONFIG_TARGET);
     }
+
+    public static getAutoDetectDepth(): number {
+        return vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).get<number>('context.autoDetectDepth') || 1;
+    }
+
+    public static getIgnorePatterns(): string[] {
+        return vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).get<string[]>('context.ignorePatterns') || [];
+    }
+
+    public static getMaxTokens(): number {
+        return vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).get<number>('context.maxTokens') || 1000000;
+    }
 }
