@@ -208,6 +208,9 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 case 'selectApiKey':
                     this.handleSelectApiKey(message.name);
                     return;
+                case 'bulkSaveApiKeys':
+                    this.handleBulkSaveApiKeys(message.text);
+                    return;
                 // --- END Key Management Commands ---
                 case 'addFileContext':
                     this.handleAddFileContext();
@@ -500,6 +503,37 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         } catch (e) {
              console.error("Failed to select API key:", e);
             this.sendMessageToWebview('error', `Failed to select API Key: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    private async handleBulkSaveApiKeys(bulkText: string) {
+        if (!bulkText.trim()) return;
+        const items = bulkText.split(',').map(p => p.trim());
+        let addedCount = 0;
+        let deletedCount = 0;
+        try {
+            for (const item of items) {
+                if (item.startsWith('-')) {
+                    const name = item.substring(1).trim();
+                    if (name) {
+                        await this.secretManager.deleteApiKey(name);
+                        deletedCount++;
+                    }
+                } else if (item.includes(':')) {
+                    const parts = item.split(':');
+                    const name = parts[0].trim();
+                    const key = parts.slice(1).join(':').trim();
+                    if (name && key) {
+                        await this.secretManager.saveApiKey(name, key);
+                        addedCount++;
+                    }
+                }
+            }
+            this.sendMessageToWebview('success', `Bulk processed: ${addedCount} added/updated, ${deletedCount} deleted.`);
+            this.sendKeyManagementDetails();
+            this.initializeApiAgent();
+        } catch (e) {
+            this.sendMessageToWebview('error', `Bulk process failed: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
     // --- End New Key Management Handlers ---
@@ -1102,6 +1136,11 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                             <input type="text" id="key-name-input" placeholder="Name (e.g., Personal, Work)" required aria-label="API Key Name">
                             <input type="password" id="key-value-input" placeholder="Gemini API Key (starts with AIza...)" required aria-label="API Key Value">
                             <button id="key-save-button">Save & Set Active</button>
+                        </div>
+                        <div class="panel-section">
+                            <h4>Bulk Manage (Comma separated)</h4>
+                            <textarea id="bulk-key-input" placeholder="Name:Key (Add), -Name (Delete)" rows="3" style="width: 100%; font-size: 11px; margin-bottom: 5px; background: var(--vscode-inputBackground); color: var(--vscode-inputForeground); border: 1px solid var(--vscode-input-border);"></textarea>
+                            <button id="bulk-save-button" style="width: 100%;">Bulk Process</button>
                         </div>
                     </div>
                     

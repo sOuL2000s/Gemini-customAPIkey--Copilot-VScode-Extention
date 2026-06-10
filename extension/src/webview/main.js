@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
             nameInput: document.getElementById('key-name-input'),
             valueInput: document.getElementById('key-value-input'),
             saveButton: document.getElementById('key-save-button'),
+            bulkInput: document.getElementById('bulk-key-input'),
+            bulkSaveButton: document.getElementById('bulk-save-button'),
             list: document.getElementById('key-list')
         },
         settings: {
@@ -260,6 +262,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (name && key) {
             postMessage('saveNewApiKey', { name, key });
             ui.keyManagement.valueInput.value = '';
+            ui.keyManagement.nameInput.value = '';
+        }
+    });
+
+    ui.keyManagement.bulkSaveButton.addEventListener('click', () => {
+        const text = ui.keyManagement.bulkInput.value;
+        if (text) {
+            postMessage('bulkSaveApiKeys', { text });
+            ui.keyManagement.bulkInput.value = '';
         }
     });
 
