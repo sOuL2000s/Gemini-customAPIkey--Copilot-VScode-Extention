@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addContextDirButton: document.getElementById('add-context-dir-button'),
         autoContextButton: document.getElementById('auto-context-button'),
         clearContextButton: document.getElementById('clear-context-button'),
+        historyToggle: document.getElementById('history-toggle'),
         tokenUsage: {
             bar: document.getElementById('token-progress-bar'),
             label: document.getElementById('token-count-label')
@@ -66,7 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
         config: {
             chatModel: 'gemini-2.5-flash',
             inlineModel: 'gemini-2.5-flash-lite',
-            debounceMs: 500
+            debounceMs: 500,
+            includeHistory: true
         },
         tokens: {
             current: 0,
@@ -96,6 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.keyManagement.toggle.setAttribute('aria-expanded', state.activePanel === 'keyManagement');
         ui.settings.toggle.classList.toggle('active', state.activePanel === 'settings');
         ui.settings.toggle.setAttribute('aria-expanded', state.activePanel === 'settings');
+
+        ui.historyToggle.classList.toggle('active', state.config.includeHistory);
+        ui.historyToggle.title = state.config.includeHistory ? "Context Awareness: ON (History included)" : "Context Awareness: OFF (History excluded)";
 
         // 2. Palette
         ui.palette.container.style.display = state.paletteVisible ? 'flex' : 'none';
@@ -285,6 +290,11 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.addContextDirButton.addEventListener('click', () => postMessage('addDirectoryContext'));
     ui.autoContextButton.addEventListener('click', () => postMessage('autoAddContext'));
     ui.clearContextButton.addEventListener('click', () => postMessage('clearAllContext'));
+    ui.historyToggle.addEventListener('click', () => {
+        const newValue = !state.config.includeHistory;
+        updateState({ config: { ...state.config, includeHistory: newValue } });
+        postMessage('toggleHistory', { value: newValue });
+    });
     ui.contextFileList.addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-context-file')) {
             postMessage('removeFileContext', { uri: e.target.getAttribute('data-uri') });
@@ -682,7 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateState({
                     keyStatus: { active: message.keyStatus, activeName: message.activeKeyName },
                     context: { files: message.contextFiles || [], activeFileName: message.activeFile },
-                    config: message.config || state.config,
+                    config: { ...state.config, ...message.config },
                     tokens: { current: message.estimatedTokens || 0, max: message.maxTokens || 1000000 }
                 });
 

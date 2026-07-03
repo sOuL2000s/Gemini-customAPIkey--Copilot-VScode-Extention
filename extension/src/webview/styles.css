@@ -780,9 +780,18 @@ body {
 #add-context-file-button:hover,
 #auto-context-button:hover,
 #clear-context-button:hover,
+#history-toggle:hover,
 #key-management-toggle:hover,
 #settings-toggle:hover {
     opacity: 1;
+}
+
+#history-toggle.active {
+    color: var(--vscode-statusBarItem-prominentForeground);
+    background-color: var(--vscode-statusBarItem-prominentBackground);
+    border-radius: 4px;
+    opacity: 1;
+    box-shadow: 0 0 4px var(--vscode-statusBarItem-prominentBackground);
 }
 
 /* --- Send Button (Arrow Icon) --- */

@@ -32,6 +32,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
     private currentAbortController: AbortController | null = null;
     
     private chatModel: string;
+    private includeHistory: boolean;
     private contextFiles: Map<string, string> = new Map(); 
     private activeFileName: string | null = null; // 1. Track active file
     private lastMultiFileEdit: { [path: string]: string } | null = null; 
@@ -42,6 +43,7 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
         private readonly globalState: vscode.Memento
     ) {
         this.chatModel = ConfigurationManager.getChatModel(); // Initialize model
+        this.includeHistory = ConfigurationManager.getIncludeHistory();
         this.updateActiveFile(); // 1. Initial file check
         this.initializeApiAgent();
 
@@ -112,7 +114,8 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                 config: {
                     chatModel: ConfigurationManager.getChatModel(),
                     inlineModel: ConfigurationManager.getInlineModel(),
-                    debounceMs: ConfigurationManager.getDebounceDelay()
+                    debounceMs: ConfigurationManager.getDebounceDelay(),
+                    includeHistory: ConfigurationManager.getIncludeHistory()
                 }
             });
             this.sendKeyManagementDetails();
@@ -181,6 +184,10 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     return;
                 case 'setDebounceDelay':
                     this.handleSetDebounceDelay(message.value);
+                    return;
+                case 'toggleHistory':
+                    this.includeHistory = message.value;
+                    await ConfigurationManager.setIncludeHistory(message.value);
                     return;
                 // DEPRECATED SETTINGS COMMAND:
                 case 'openSettings': 
@@ -849,7 +856,28 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                     2. For entirely new code snippets, explanations, or general guidance, use a standard markdown code block (\`\`\`${languageId}\`).
                 `;
 
+                let chatHistoryContext = '';
+                if (this.includeHistory) {
+                    const rawHistory = this.globalState.get<string>('geminiLocalCoderChatHistory', '');
+                    if (rawHistory) {
+                        // Basic extraction of text from the simple message structure stored in HTML.
+                        // This removes HTML tags and formats a readable dialogue for the LLM.
+                        const cleanHistory = rawHistory
+                            .replace(/<div class="message (user|assistant|system).*?">(.*?)<\/div>/gs, (match, role, content) => {
+                                // Strip inner tags (p, ul, li, etc) and collapse whitespace
+                                const textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                                return textContent ? `\n${role.toUpperCase()}: ${textContent}` : '';
+                            })
+                            .replace(/<[^>]*>/g, ''); // Final sweep for any stray tags
+                        
+                        if (cleanHistory.trim()) {
+                            chatHistoryContext = `\n--- PREVIOUS CONVERSATION HISTORY ---\n${cleanHistory}\n--- END CONVERSATION HISTORY ---\n`;
+                        }
+                    }
+                }
+
                 const userContent = `
+                    ${chatHistoryContext}
                     --- Selected Code Context ---
                     ${selectedText ? selectedText : 'No code selected.'}
                     --- End Selected Code Context ---
@@ -1105,6 +1133,13 @@ class GeminiCoderProvider implements vscode.WebviewViewProvider {
                                     <path d="M6 12L6.01 12"/>
                                     <path d="M18 8L18.01 8"/>
                                     <path d="M12 16L12.01 16"/>
+                                </svg>
+                            </button>
+
+                            <!-- History/Context Awareness Toggle Button -->
+                            <button id="history-toggle" title="Toggle Chat History (Context Awareness)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04Z"/>
                                 </svg>
                             </button>
                             

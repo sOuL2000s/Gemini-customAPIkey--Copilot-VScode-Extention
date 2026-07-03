@@ -70,4 +70,18 @@ export class ConfigurationManager {
     public static getMaxTokens(): number {
         return vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).get<number>('context.maxTokens') || 1000000;
     }
+
+    /**
+     * Retrieves whether chat history should be included in prompt context.
+     */
+    public static getIncludeHistory(): boolean {
+        return vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).get<boolean>('chat.includeHistory') !== false;
+    }
+
+    /**
+     * Sets whether chat history should be included in prompt context.
+     */
+    public static async setIncludeHistory(value: boolean): Promise<void> {
+        await vscode.workspace.getConfiguration(ConfigurationManager.CONFIG_SECTION).update('chat.includeHistory', value, this.CONFIG_TARGET);
+    }
 }

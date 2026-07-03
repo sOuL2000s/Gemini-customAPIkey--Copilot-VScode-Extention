@@ -141,6 +141,11 @@
           "type": "number",
           "default": 1000000,
           "description": "The maximum estimated token limit for the context window. Suggestions will be truncated beyond this."
+        },
+        "gemini.chat.includeHistory": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to include previous chat messages as context for the sidebar chat."
         }
       }
     }
